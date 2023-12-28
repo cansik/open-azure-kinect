@@ -13,7 +13,7 @@ class OpenK4AVideoStream(OpenK4AStream):
     width: int
     height: int
 
-    frame_rate: str
+    frame_rate: float
     title: str
 
 

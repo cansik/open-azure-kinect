@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Union, Optional, Dict, List, Sequence
 
-import ffmpeg
+import ffmpegio
 
 from openk4a.capture import OpenK4ACapture
 from openk4a.stream import OpenK4AVideoStream
@@ -16,7 +16,6 @@ class OpenK4APlayback:
         self._path = Path(path)
 
         self.loglevel = loglevel
-        self._probe_info: Optional[Dict] = None
         self._calibration_info: Optional[Dict] = None
 
         self.streams: List[OpenK4AVideoStream] = []
@@ -26,8 +25,7 @@ class OpenK4APlayback:
             raise FileNotFoundError(f"Could not find {self._path}")
 
         # probe file to find out which streams are available
-        self._probe_info = ffmpeg.probe(str(self._path))
-        stream_infos = self._probe_info["streams"]
+        stream_infos = ffmpegio.probe.streams_basic(str(self._path))
 
         # create stream descriptions
         self.streams.clear()
@@ -38,7 +36,7 @@ class OpenK4APlayback:
                     codec_name=stream_info["codec_name"],
                     width=int(stream_info["width"]),
                     height=int(stream_info["height"]),
-                    frame_rate=stream_info["r_frame_rate"],
+                    frame_rate=float(stream_info["r_frame_rate"]),
                     title=stream_info["tags"]["title"]
                 )
                 self.streams.append(stream)
@@ -84,10 +82,6 @@ class OpenK4APlayback:
     @property
     def path(self) -> Path:
         return self._path
-
-    @property
-    def probe_info(self) -> Optional[Dict]:
-        return self._probe_info
 
     @property
     def calibration_info(self) -> Optional[Dict]:
