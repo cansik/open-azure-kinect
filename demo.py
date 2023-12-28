@@ -1,5 +1,7 @@
 import argparse
 
+import cv2
+
 from openk4a.playback import OpenK4APlayback
 
 
@@ -13,6 +15,12 @@ def main():
 
     for stream in azure.streams:
         print(stream)
+
+    print(azure.calibration_info)
+
+    while capture := azure.read():
+        cv2.imshow("Demo", cv2.cvtColor(capture.color, cv2.COLOR_BGR2RGB))
+        cv2.waitKey(1)
 
     azure.close()
 
