@@ -1,4 +1,6 @@
 # Open Azure Kinect
+Open playback functions for Azure Kinect.
+
 It is possible to playback [Azure Kinect](https://github.com/microsoft/Azure-Kinect-Sensor-SDK) videos files (mkv) without using the official SDK. This allows the software to be used on systems where the depth engine is not implemented, such as MacOS. The library currently **only** supports the **playback** of mkv files and does **not provide direct access** to the Azure Kinect device.
 
 The following functions are currently supported:
@@ -37,10 +39,12 @@ while capture := azure.read():
     color_image = capture.color
 ```
 
-## Develop and Examples
+## Development and Examples
 To run the examples or develop the library please install the `dev-requirements.txt` and `requirements.txt`.
 
 ```terminal
 pip install -r dev-requirements.txt
 pip install -r requirements.txt
 ```
+
+There is already an example script [demo.py](demo.py) which provides insights in how to use the library.
