@@ -1,0 +1,6 @@
+# development
+setuptools
+wheel
+
+# examples
+opencv-python

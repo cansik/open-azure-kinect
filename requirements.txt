@@ -1,2 +1,1 @@
-opencv-python
-ffmpegio
+ffmpegio~=0.9.0
