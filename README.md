@@ -1,4 +1,4 @@
-# Open Azure Kinect ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/open-azure-kinect)
+# Open Azure Kinect [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/open-azure-kinect)](https://pypi.org/project/open-azure-kinect/)
 
 Open playback functions for Azure Kinect.
 
