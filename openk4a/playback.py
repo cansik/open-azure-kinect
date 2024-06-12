@@ -11,6 +11,9 @@ from ffmpegio.streams import AviMediaReader
 from openk4a.calibration import CameraType, CameraCalibration, Intrinsics, Extrinsics
 from openk4a.capture import OpenK4ACapture
 from openk4a.stream import OpenK4AVideoStream, OpenK4AColorStreamName, OpenK4ADepthStreamName, OpenK4AInfraredStreamName
+from openk4a.types import ColorResolution, DepthMode
+from openk4a.utils._calibration_utils import transformation_get_mode_specific_color_camera_calibration, \
+    transformation_get_mode_specific_depth_camera_calibration
 
 
 class OpenK4APlayback:
@@ -20,7 +23,7 @@ class OpenK4APlayback:
         self.is_looping = is_looping
 
         self.loglevel = loglevel
-        self._calibration_info: Optional[Dict] = None
+        self._calibration_raw: Optional[Dict] = None
 
         self.streams: List[OpenK4AVideoStream] = []
         self._stream_map: Dict[str, OpenK4AVideoStream] = {}
@@ -30,6 +33,9 @@ class OpenK4APlayback:
         self._frame_iterator: Optional[Iterator] = None
 
         self._calibrations: Dict[CameraType, CameraCalibration] = {}
+
+        self._depth_mode: DepthMode = DepthMode.OFF
+        self._color_resolution: ColorResolution = ColorResolution.OFF
 
     def open(self) -> None:
         if not self._path.exists():
@@ -101,6 +107,13 @@ class OpenK4APlayback:
                 )
                 self.streams.append(stream)
 
+                # read resolution / depth mode
+                tags = stream_info["tags"]
+                if "K4A_COLOR_MODE" in tags:
+                    self._color_resolution = ColorResolution(stream.height)
+                if "K4A_DEPTH_MODE" in tags:
+                    self._depth_mode = DepthMode[tags["K4A_DEPTH_MODE"]]
+
             if stream_info["codec_type"] == "attachment":
                 # read calibration information
                 if "K4A_CALIBRATION_FILE" in stream_info["tags"]:
@@ -122,7 +135,7 @@ class OpenK4APlayback:
         subprocess.run(args)
 
         if output_file.exists():
-            self._calibration_info = json.loads(output_file.read_text(encoding="UTF-8"))
+            self._calibration_raw = json.loads(output_file.read_text(encoding="UTF-8"))
             output_file.unlink()
         else:
             raise FileNotFoundError("Calibration data could not been extracted.")
@@ -130,7 +143,7 @@ class OpenK4APlayback:
     def _extract_calibration_info(self):
         camera_types = {member.value: member for member in CameraType}
 
-        for cam_info in self._calibration_info["CalibrationInformation"]["Cameras"]:
+        for cam_info in self._calibration_raw["CalibrationInformation"]["Cameras"]:
             purpose = cam_info["Purpose"]
             camera_type = camera_types[purpose] if purpose in camera_types else None
 
@@ -139,8 +152,12 @@ class OpenK4APlayback:
 
             model_parameters = cam_info["Intrinsics"]["ModelParameters"]
 
+            # sensor size
+            sensor_width = int(cam_info["SensorWidth"])
+            sensor_height = int(cam_info["SensorHeight"])
+
             # extract intrinsic parameters
-            cx, cy, fx, fy = model_parameters[:4]
+            cx, cy, fx, fy = np.array(model_parameters[:4])
 
             camera_matrix = np.array([
                 [fx, 0, cx],
@@ -148,18 +165,34 @@ class OpenK4APlayback:
                 [0, 0, 1]
             ], dtype=np.float32)
 
-            distortion_coefficients = np.array(model_parameters[4:], dtype=np.float32)
+            distortion_coefficients = np.array(model_parameters[4:4 + 8], dtype=np.float32)
             metric_radius = float(cam_info["MetricRadius"])
+
+            # metric_radius equals 0 means that calibration failed to estimate this parameter
+            if metric_radius < 0.0001:
+                metric_radius = 1.7
 
             # extract extrinsic parameters
             rotation = np.array(cam_info["Rt"]["Rotation"], dtype=np.float32).reshape(3, 3)
             translation = np.array(cam_info["Rt"]["Translation"], dtype=np.float32)
 
-            self._calibrations[camera_type] = CameraCalibration(
+            raw_calibration = CameraCalibration(
                 Intrinsics(camera_matrix, distortion_coefficients),
                 Extrinsics(rotation, translation),
+                sensor_width, sensor_height,
                 metric_radius
             )
+
+            if camera_type == CameraType.Color:
+                calib = transformation_get_mode_specific_color_camera_calibration(raw_calibration,
+                                                                                  self.color_resolution)
+            elif camera_type == CameraType.Depth:
+                calib = transformation_get_mode_specific_depth_camera_calibration(raw_calibration,
+                                                                                  self.depth_mode)
+            else:
+                raise ValueError("Unsupported camera type.")
+
+            self._calibrations[camera_type] = calib
 
     @property
     def _loglevel_param(self) -> Sequence[str]:
@@ -170,13 +203,12 @@ class OpenK4APlayback:
         return self._path
 
     @property
-    def calibration_info(self) -> Optional[Dict]:
-        return self._calibration_info
+    def calibration_raw(self) -> Optional[Dict]:
+        return self._calibration_raw
 
     def get_calibration(self, camera_type: CameraType) -> Optional[CameraCalibration]:
         if camera_type in self._calibrations:
             return self._calibrations[camera_type]
-
         return None
 
     @property
@@ -186,3 +218,11 @@ class OpenK4APlayback:
     @property
     def depth_calibration(self) -> Optional[CameraCalibration]:
         return self.get_calibration(camera_type=CameraType.Depth)
+
+    @property
+    def depth_mode(self) -> DepthMode:
+        return self._depth_mode
+
+    @property
+    def color_resolution(self) -> ColorResolution:
+        return self._color_resolution
