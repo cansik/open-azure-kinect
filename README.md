@@ -7,7 +7,7 @@ It is possible to playback [Azure Kinect](https://github.com/microsoft/Azure-Kin
 The following functions are currently supported:
 
 - Reading colour, infrared and depth stream from mkv
-- Reading calibration data from mkv
+- Reading and parsing calibration data from mkv
 
 ## Installation
 
@@ -38,6 +38,14 @@ And read the actual capture information (image data).
 while capture := azure.read():
     # read color frame as numpy array
     color_image = capture.color
+```
+
+### Calibration Data
+To access the calibration data of the two cameras (`Color`, `Depth`), use the parsed information property.
+
+```python
+color_calib = azure.color_calibration
+depth_calib = azure.depth_calibration
 ```
 
 ## Development and Examples

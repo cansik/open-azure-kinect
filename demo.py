@@ -16,7 +16,7 @@ def main():
     for stream in azure.streams:
         print(stream)
 
-    print(azure.calibration_info)
+    print(azure.color_calibration)
 
     while capture := azure.read():
         cv2.imshow("Demo", cv2.cvtColor(capture.color, cv2.COLOR_BGR2RGB))

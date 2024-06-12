@@ -8,6 +8,7 @@ import ffmpegio
 import numpy as np
 from ffmpegio.streams import AviMediaReader
 
+from openk4a.calibration import CameraType, CameraCalibration, Intrinsics, Extrinsics
 from openk4a.capture import OpenK4ACapture
 from openk4a.stream import OpenK4AVideoStream, OpenK4AColorStreamName, OpenK4ADepthStreamName, OpenK4AInfraredStreamName
 
@@ -27,6 +28,8 @@ class OpenK4APlayback:
         self.block_size: int = 1
         self._video_reader: Optional[AviMediaReader] = None
         self._frame_iterator: Optional[Iterator] = None
+
+        self._calibrations: Dict[CameraType, CameraCalibration] = {}
 
     def open(self) -> None:
         if not self._path.exists():
@@ -107,6 +110,8 @@ class OpenK4APlayback:
         self._stream_map.clear()
         self._stream_map = {s.stream_name: s for s in self.streams}
 
+        self._extract_calibration_info()
+
     def _extract_calibration_data(self, filename: str):
         output_file = Path(tempfile.gettempdir(), filename)
 
@@ -122,6 +127,40 @@ class OpenK4APlayback:
         else:
             raise FileNotFoundError("Calibration data could not been extracted.")
 
+    def _extract_calibration_info(self):
+        camera_types = {member.value: member for member in CameraType}
+
+        for cam_info in self._calibration_info["CalibrationInformation"]["Cameras"]:
+            purpose = cam_info["Purpose"]
+            camera_type = camera_types[purpose] if purpose in camera_types else None
+
+            if camera_type is None:
+                continue
+
+            model_parameters = cam_info["Intrinsics"]["ModelParameters"]
+
+            # extract intrinsic parameters
+            cx, cy, fx, fy = model_parameters[:4]
+
+            camera_matrix = np.array([
+                [fx, 0, cx],
+                [0, fy, cy],
+                [0, 0, 1]
+            ], dtype=np.float32)
+
+            distortion_coefficients = np.array(model_parameters[4:], dtype=np.float32)
+            metric_radius = float(cam_info["MetricRadius"])
+
+            # extract extrinsic parameters
+            rotation = np.array(cam_info["Rt"]["Rotation"], dtype=np.float32).reshape(3, 3)
+            translation = np.array(cam_info["Rt"]["Translation"], dtype=np.float32)
+
+            self._calibrations[camera_type] = CameraCalibration(
+                Intrinsics(camera_matrix, distortion_coefficients),
+                Extrinsics(rotation, translation),
+                metric_radius
+            )
+
     @property
     def _loglevel_param(self) -> Sequence[str]:
         return "-loglevel", self.loglevel
@@ -133,3 +172,17 @@ class OpenK4APlayback:
     @property
     def calibration_info(self) -> Optional[Dict]:
         return self._calibration_info
+
+    def get_calibration(self, camera_type: CameraType) -> Optional[CameraCalibration]:
+        if camera_type in self._calibrations:
+            return self._calibrations[camera_type]
+
+        return None
+
+    @property
+    def color_calibration(self) -> Optional[CameraCalibration]:
+        return self.get_calibration(camera_type=CameraType.Color)
+
+    @property
+    def depth_calibration(self) -> Optional[CameraCalibration]:
+        return self.get_calibration(camera_type=CameraType.Depth)
