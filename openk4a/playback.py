@@ -150,14 +150,14 @@ class OpenK4APlayback:
             if camera_type is None:
                 continue
 
-            model_parameters = cam_info["Intrinsics"]["ModelParameters"]
+            params = cam_info["Intrinsics"]["ModelParameters"]
 
             # sensor size
             sensor_width = int(cam_info["SensorWidth"])
             sensor_height = int(cam_info["SensorHeight"])
 
             # extract intrinsic parameters
-            cx, cy, fx, fy = np.array(model_parameters[:4])
+            cx, cy, fx, fy = np.array(params[:4])
 
             camera_matrix = np.array([
                 [fx, 0, cx],
@@ -165,7 +165,9 @@ class OpenK4APlayback:
                 [0, 0, 1]
             ], dtype=np.float32)
 
-            distortion_coefficients = np.array(model_parameters[4:4 + 8], dtype=np.float32)
+            # distortion coefficients in opencv-compatible format
+            distortion_coefficients = np.array([params[4], params[5], params[13], params[12], *params[6:10]],
+                                               dtype=np.float32)
             metric_radius = float(cam_info["MetricRadius"])
 
             # metric_radius equals 0 means that calibration failed to estimate this parameter
@@ -175,6 +177,9 @@ class OpenK4APlayback:
             # extract extrinsic parameters
             rotation = np.array(cam_info["Rt"]["Rotation"], dtype=np.float32).reshape(3, 3)
             translation = np.array(cam_info["Rt"]["Translation"], dtype=np.float32)
+
+            # millimeter to meter conversion
+            translation = translation / 1000
 
             raw_calibration = CameraCalibration(
                 Intrinsics(camera_matrix, distortion_coefficients),
