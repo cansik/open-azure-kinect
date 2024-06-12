@@ -15,7 +15,7 @@ long_description = (current_dir / "README.md").read_text()
 
 setup(
     name=NAME,
-    version="0.1.0",
+    version="0.1.0a1",
     packages=required_packages,
     url="https://github.com/cansik/open-azure-kinect",
     license="MIT License",
