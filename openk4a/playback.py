@@ -117,7 +117,7 @@ class OpenK4APlayback:
         subprocess.run(args)
 
         if output_file.exists():
-            self._calibration_info = json.loads(output_file.read_text("UTF-8"))
+            self._calibration_info = json.loads(output_file.read_text(encoding="UTF-8"))
             output_file.unlink()
         else:
             raise FileNotFoundError("Calibration data could not been extracted.")
