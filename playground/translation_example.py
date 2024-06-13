@@ -111,14 +111,21 @@ def transform_points_between_cameras_using_homography(points: np.ndarray,
     D1 = calib_a.intrinsics.distortion_coefficients
     K2 = calib_b.intrinsics.camera_matrix
     D2 = calib_b.intrinsics.distortion_coefficients
-    R = calib_b.extrinsics.rotation
-    t = calib_b.extrinsics.translation
+
+    # Compute relative rotation and translation
+    R_A = calib_a.extrinsics.rotation
+    t_A = calib_a.extrinsics.translation
+    R_B = calib_b.extrinsics.rotation
+    t_B = calib_b.extrinsics.translation
+
+    R_BA = R_B @ np.linalg.inv(R_A)
+    t_BA = t_B - R_BA @ t_A
 
     # Undistort the points in the first camera's image plane
     undistorted_points_a = undistort_points(points, K1, D1)
 
     # Calculate the homography matrix
-    H = calculate_homography(K1, K2, R, t, Z0)
+    H = calculate_homography(K1, K2, R_BA, t_BA, Z0)
 
     # Convert undistorted points to homogeneous coordinates
     undistorted_points_h = np.hstack([undistorted_points_a, np.ones((undistorted_points_a.shape[0], 1))])
