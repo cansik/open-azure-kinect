@@ -50,6 +50,24 @@ def normalize_image(image: np.ndarray, min_value: float = 0, max_value: float = 
     return img
 
 
+def undistort_points(points: np.ndarray, camera_matrix: np.ndarray, distortion_coefficients: np.ndarray) -> np.ndarray:
+    """
+    Undistort points using the camera matrix and distortion coefficients.
+
+    Args:
+        points (np.ndarray): Array of 2D points (Nx2) to be undistorted.
+        camera_matrix (np.ndarray): Camera matrix (3x3).
+        distortion_coefficients (np.ndarray): Distortion coefficients (1xN).
+
+    Returns:
+        np.ndarray: Array of undistorted 2D points (Nx2).
+    """
+    points = points.reshape(-1, 1, 2)  # Reshape for OpenCV function
+    undistorted_points = cv2.undistortPoints(points, camera_matrix, distortion_coefficients, P=camera_matrix)
+    undistorted_points = undistorted_points.reshape(-1, 2)  # Reshape back to Nx2
+    return undistorted_points
+
+
 def calculate_homography(K1: np.ndarray, K2: np.ndarray, R: np.ndarray, t: np.ndarray, Z0: float) -> np.ndarray:
     """
     Calculate the homography matrix between two cameras.
@@ -78,7 +96,7 @@ def transform_points_between_cameras_using_homography(points: np.ndarray,
                                                       calib_b: CameraCalibration,
                                                       Z0: float) -> np.ndarray:
     """
-    Transform points from one camera to another using the homography matrix.
+    Transform points from one camera to another using the homography matrix, taking distortion into account.
 
     Args:
         points (np.ndarray): Array of 2D points (Nx2) in the first camera's image plane.
@@ -90,58 +108,32 @@ def transform_points_between_cameras_using_homography(points: np.ndarray,
         np.ndarray: Transformed 2D points (Nx2) in the second camera's image plane.
     """
     K1 = calib_a.intrinsics.camera_matrix
+    D1 = calib_a.intrinsics.distortion_coefficients
     K2 = calib_b.intrinsics.camera_matrix
+    D2 = calib_b.intrinsics.distortion_coefficients
     R = calib_b.extrinsics.rotation
     t = calib_b.extrinsics.translation
+
+    # Undistort the points in the first camera's image plane
+    undistorted_points_a = undistort_points(points, K1, D1)
 
     # Calculate the homography matrix
     H = calculate_homography(K1, K2, R, t, Z0)
 
-    # Convert points to homogeneous coordinates
-    points_h = np.hstack([points, np.ones((points.shape[0], 1))])
+    # Convert undistorted points to homogeneous coordinates
+    undistorted_points_h = np.hstack([undistorted_points_a, np.ones((undistorted_points_a.shape[0], 1))])
 
     # Transform points using the homography matrix
-    transformed_points_h = (H @ points_h.T).T
+    transformed_points_h = (H @ undistorted_points_h.T).T
 
     # Convert back to non-homogeneous coordinates
     transformed_points = transformed_points_h[:, :2] / transformed_points_h[:, 2][:, np.newaxis]
 
-    return transformed_points
+    # Distort the transformed points using the second camera's distortion coefficients
+    transformed_points_distorted = cv2.undistortPoints(transformed_points, K2, D2, P=K2)
+    transformed_points_distorted = transformed_points_distorted.reshape(-1, 2)
 
-
-def transform_points_between_cameras(points: np.ndarray,
-                                     calib_a: CameraCalibration,
-                                     calib_b: CameraCalibration) -> np.ndarray:
-    # Step 1: Undistort points from Camera A
-    undistorted_points_a = cv2.undistortPoints(
-        points,
-        calib_a.intrinsics.camera_matrix,
-        calib_a.intrinsics.distortion_coefficients,
-        None,
-        calib_a.intrinsics.camera_matrix
-    )
-
-    # Convert to homogeneous coordinates
-    undistorted_points_a_hom = cv2.convertPointsToHomogeneous(undistorted_points_a)[:, 0, :]
-
-    # Step 2: Transform points to Camera B's coordinate system
-    # Compute the relative rotation and translation between the cameras
-    R_a_to_b = np.dot(calib_b.extrinsics.rotation, calib_a.extrinsics.rotation.T)
-    t_a_to_b = calib_b.extrinsics.translation - np.dot(R_a_to_b, calib_a.extrinsics.translation)
-
-    # Apply the transformation
-    points_in_cam_b = np.dot(R_a_to_b, undistorted_points_a_hom.T).T + t_a_to_b
-
-    # Step 3: Project points into Camera B's image
-    points_2d_b = cv2.projectPoints(
-        points_in_cam_b,
-        np.zeros((3, 1)),  # No rotation needed as points are already in Camera B's frame
-        np.zeros((3, 1)),  # No translation needed
-        calib_b.intrinsics.camera_matrix,
-        calib_b.intrinsics.distortion_coefficients
-    )[0]
-
-    return points_2d_b.reshape(-1, 2)
+    return transformed_points_distorted
 
 
 def main():
