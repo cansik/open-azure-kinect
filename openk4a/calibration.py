@@ -49,8 +49,8 @@ class Intrinsics:
 
 @dataclass
 class Extrinsics:
-    rotation: np.ndarray
-    translation: np.ndarray
+    rotation: np.ndarray  # 3x3
+    translation: np.ndarray  # in m, vector 1x3
 
 
 @dataclass
@@ -58,7 +58,7 @@ class CameraCalibration:
     intrinsics: Intrinsics
     extrinsics: Extrinsics
 
-    sensor_width: int
-    sensor_height: int
+    width: int
+    height: int
 
     metric_radius: float

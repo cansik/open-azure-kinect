@@ -29,8 +29,8 @@ def transformation_get_mode_specific_camera_calibration(calibration: CameraCalib
     mode_specific_camera_calibration = CameraCalibration(
         calibration.intrinsics,
         calibration.extrinsics,
-        calibration.sensor_width,
-        calibration.sensor_height,
+        calibration.width,
+        calibration.height,
         calibration.metric_radius
     )
 
@@ -55,8 +55,8 @@ def transformation_get_mode_specific_camera_calibration(calibration: CameraCalib
         params.fx = fx / mode_info.output_image_resolution.width
         params.fy = fy / mode_info.output_image_resolution.height
 
-    mode_specific_camera_calibration.sensor_width = mode_info.output_image_resolution.width
-    mode_specific_camera_calibration.sensor_height = mode_info.output_image_resolution.height
+    mode_specific_camera_calibration.width = mode_info.output_image_resolution.width
+    mode_specific_camera_calibration.height = mode_info.output_image_resolution.height
 
     return mode_specific_camera_calibration
 
@@ -66,7 +66,7 @@ def transformation_get_mode_specific_depth_camera_calibration(calibration: Camer
     if calibration is None:
         raise ValueError("Calibration data is required")
 
-    if not (calibration.sensor_width == 1024 and calibration.sensor_height == 1024):
+    if not (calibration.width == 1024 and calibration.height == 1024):
         raise ValueError("Unexpected raw camera calibration resolution, should be (1024, 1024)")
 
     if depth_mode == DepthMode.NFOV_2X2BINNED:
@@ -85,16 +85,16 @@ def transformation_get_mode_specific_depth_camera_calibration(calibration: Camer
 
 def transformation_get_mode_specific_color_camera_calibration(calibration: CameraCalibration,
                                                               color_resolution: ColorResolution) -> CameraCalibration:
-    if calibration.sensor_width * 9 / 16 == calibration.sensor_height:
+    if calibration.width * 9 / 16 == calibration.height:
         mode_info = CameraCalibrationModeInfo(Size(4096, 2304), Size(0, -384), Size(4096, 3072))
         return transformation_get_mode_specific_camera_calibration(
             calibration, mode_info, False)
-    elif calibration.sensor_width * 3 / 4 == calibration.sensor_height:
+    elif calibration.width * 3 / 4 == calibration.height:
         mode_specific_camera_calibration = CameraCalibration(
             calibration.intrinsics,
             calibration.extrinsics,
-            calibration.sensor_width,
-            calibration.sensor_height,
+            calibration.width,
+            calibration.height,
             calibration.metric_radius
         )
     else:
