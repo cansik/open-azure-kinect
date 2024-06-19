@@ -176,7 +176,7 @@ class OpenK4APlayback:
 
             # extract extrinsic parameters
             rotation = np.array(cam_info["Rt"]["Rotation"], dtype=np.float32).reshape(3, 3)
-            translation = np.array(cam_info["Rt"]["Translation"], dtype=np.float32)
+            translation = np.array(cam_info["Rt"]["Translation"], dtype=np.float32).reshape(1, 3)
 
             # millimeter to meter conversion
             translation = translation / 1000
