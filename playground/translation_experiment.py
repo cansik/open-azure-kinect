@@ -1,4 +1,5 @@
 import argparse
+from typing import List, Optional
 
 import cv2
 import numpy as np
@@ -10,6 +11,128 @@ from playground.CharucoDetectionHelper import CharucoDetectionHelper
 from playground.translation_example import compute_distortion_mapping, compute_inverse_distortion_mapping, \
     DistortionMapping
 from playground.utils import normalize_image, concat_images_horizontally, annotate_points, concat_images_vertically
+
+
+def k4a_project(xy: List[float], calibration: CameraCalibration) -> Optional[List[float]]:
+    fx = calibration.intrinsics.fx
+    fy = calibration.intrinsics.fy
+    cx = calibration.intrinsics.cx
+    cy = calibration.intrinsics.cy
+    k1 = calibration.intrinsics.k1
+    k2 = calibration.intrinsics.k2
+    k3 = calibration.intrinsics.k3
+    k4 = calibration.intrinsics.k4
+    k5 = calibration.intrinsics.k5
+    k6 = calibration.intrinsics.k6
+    p1 = calibration.intrinsics.p1
+    p2 = calibration.intrinsics.p2
+    codx = 0  # assuming center of distortion is (0, 0) for Brown Conrady model
+    cody = 0
+    max_radius_for_projection = calibration.metric_radius
+
+    # Validation check for fx and fy
+    if fx <= 0.0 or fy <= 0.0:
+        raise ValueError(f"Expect both fx and fy to be larger than 0, actual values are fx: {fx}, fy: {fy}.")
+
+    xp = xy[0] - codx
+    yp = xy[1] - cody
+
+    xp2 = xp * xp
+    yp2 = yp * yp
+    xyp = xp * yp
+    rs = xp2 + yp2
+    if rs > max_radius_for_projection * max_radius_for_projection:
+        return None
+
+    rss = rs * rs
+    rsc = rss * rs
+    a = 1.0 + k1 * rs + k2 * rss + k3 * rsc
+    b = 1.0 + k4 * rs + k5 * rss + k6 * rsc
+    bi = 1.0 / b if b != 0.0 else 1.0
+    d = a * bi
+
+    xp_d = xp * d
+    yp_d = yp * d
+
+    rs_2xp2 = rs + 2.0 * xp2
+    rs_2yp2 = rs + 2.0 * yp2
+
+    xp_d += rs_2xp2 * p2 + 2.0 * xyp * p1
+    yp_d += rs_2yp2 * p1 + 2.0 * xyp * p2
+
+    xp_d_cx = xp_d + codx
+    yp_d_cy = yp_d + cody
+
+    uv = [0, 0]
+    uv[0] = xp_d_cx * fx + cx
+    uv[1] = yp_d_cy * fy + cy
+
+    return uv
+
+
+def k4a_unproject(uv: List[float], calibration: CameraCalibration) -> List[float]:
+    fx = calibration.intrinsics.fx
+    fy = calibration.intrinsics.fy
+    cx = calibration.intrinsics.cx
+    cy = calibration.intrinsics.cy
+    k1 = calibration.intrinsics.k1
+    k2 = calibration.intrinsics.k2
+    k3 = calibration.intrinsics.k3
+    k4 = calibration.intrinsics.k4
+    k5 = calibration.intrinsics.k5
+    k6 = calibration.intrinsics.k6
+    p1 = calibration.intrinsics.p1
+    p2 = calibration.intrinsics.p2
+    codx = 0  # assuming center of distortion is (0, 0) for Brown Conrady model
+    cody = 0
+
+    # correction for radial distortion
+    xp_d = (uv[0] - cx) / fx - codx
+    yp_d = (uv[1] - cy) / fy - cody
+
+    rs = xp_d * xp_d + yp_d * yp_d
+    rss = rs * rs
+    rsc = rss * rs
+    a = 1.0 + k1 * rs + k2 * rss + k3 * rsc
+    b = 1.0 + k4 * rs + k5 * rss + k6 * rsc
+    ai = 1.0 / a if a != 0.0 else 1.0
+    di = ai * b
+
+    xy = [0, 0]
+    xy[0] = xp_d * di
+    xy[1] = yp_d * di
+
+    # approximate correction for tangential params
+    two_xy = 2.0 * xy[0] * xy[1]
+    xx = xy[0] * xy[0]
+    yy = xy[1] * xy[1]
+
+    xy[0] -= (yy + 3.0 * xx) * p2 + two_xy * p1
+    xy[1] -= (xx + 3.0 * yy) * p1 + two_xy * p2
+
+    # add on center of distortion
+    xy[0] += codx
+    xy[1] += cody
+
+    # todo: call k4a_iterative_unproject
+
+    return xy
+
+
+def k4a_convert_to_normalized(uv, calibration: CameraCalibration):
+    i = calibration.intrinsics
+    xy = [0, 0]
+    xy[0] = (uv[0] - i.cx) / i.fx
+    xy[1] = (uv[1] - i.cy) / i.fy
+    return xy
+
+
+def k4a_convert_to_pixels(xy, calibration: CameraCalibration):
+    i = calibration.intrinsics
+    undistorted_uv = [0, 0]
+    undistorted_uv[0] = xy[0] * i.fx + i.cx
+    undistorted_uv[1] = xy[1] * i.fy + i.cy
+    return undistorted_uv
 
 
 def transform_2d_to_2d(points: np.ndarray, calib_a: CameraCalibration, calib_b: CameraCalibration,
@@ -144,8 +267,6 @@ def calculate_homography_openai(K1, K2, R1, t1, R2, t2, n, d):
     # Calculate the intermediate matrix
     term = np.dot(t1, n.T) / d
 
-    print(t1)
-
     # Calculate the homography matrix
     H = np.dot(K2, np.dot(np.linalg.inv(R1) - term, np.linalg.inv(K1)))
 
@@ -200,6 +321,14 @@ def analyze_capture(azure: OpenK4APlayback, capture: OpenK4ACapture):
     inv_color_distortion_mapping = compute_inverse_distortion_mapping(azure.color_calibration)
     infrared_distortion_mapping = compute_distortion_mapping(azure.depth_calibration)
     inv_infrared_distortion_mapping = compute_inverse_distortion_mapping(azure.depth_calibration)
+
+    # distortion test
+    point = np.array([[100, 100]], dtype=np.float32)
+    k4a_camera_space = k4a_unproject(point[0], azure.color_calibration)
+    k4a_uv_undist = k4a_convert_to_pixels(k4a_camera_space, azure.color_calibration)
+    k4a_uv = k4a_project(k4a_camera_space, azure.color_calibration)
+    opencv_inv_distortion = inv_color_distortion_mapping.transform(point)[0]
+    opencv_distortion = color_distortion_mapping.transform(point)[0]
 
     color_markers = detector.detect_markers(color)
     infrared_markers = detector.detect_markers(infrared)
