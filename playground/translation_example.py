@@ -22,7 +22,7 @@ class DistortionMapping:
 
         return np.hstack((x_values.reshape(-1, 1), y_values.reshape(-1, 1)))
 
-    def remap(self, image: np.ndarray, interpolation_method: int = cv2.INTER_LINEAR):
+    def remap(self, image: np.ndarray, interpolation_method: int = cv2.INTER_NEAREST):
         return cv2.remap(image, self.x_mapping, self.y_mapping, interpolation_method)
 
 
@@ -121,7 +121,6 @@ def transform_points_with_cv(points: np.ndarray,
                              calib_a: CameraCalibration,
                              calib_b: CameraCalibration,
                              Z0: float) -> np.ndarray:
-
     # Extract intrinsics
     K_a = calib_a.intrinsics.camera_matrix
     K_b = calib_b.intrinsics.camera_matrix

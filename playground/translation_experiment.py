@@ -330,6 +330,19 @@ def analyze_capture(azure: OpenK4APlayback, capture: OpenK4ACapture):
     opencv_inv_distortion = inv_color_distortion_mapping.transform(point)[0]
     opencv_distortion = color_distortion_mapping.transform(point)[0]
 
+    # https://github.com/microsoft/Azure-Kinect-Sensor-SDK/issues/983
+    size = (azure.color_calibration.width, azure.color_calibration.height)
+    newK, _ = cv2.getOptimalNewCameraMatrix(azure.color_calibration.intrinsics.camera_matrix,
+                                            azure.color_calibration.intrinsics.distortion_coefficients,
+                                            size,
+                                            1)
+
+    map1, map2 = cv2.initInverseRectificationMap(newK, azure.color_calibration.intrinsics.distortion_coefficients,
+                                                 np.eye(3), newK, size, cv2.CV_32FC1)
+    optimal_inv_distortion = DistortionMapping(map1, map2)
+    optimal_inv_camera_space = optimal_inv_distortion.transform(point)[0]
+    optimal_color = cv2.remap(color, map1, map2, cv2.INTER_NEAREST)
+
     color_markers = detector.detect_markers(color)
     infrared_markers = detector.detect_markers(infrared)
     # markers.annotate(color)
@@ -340,6 +353,8 @@ def analyze_capture(azure: OpenK4APlayback, capture: OpenK4ACapture):
 
     color_rectified = color_distortion_mapping.remap(color)
     infrared_rectified = infrared_distortion_mapping.remap(infrared)
+
+    cv2.imshow("Optimal Matrix", concat_images_vertically(color_rectified, optimal_color))
 
     center_distance = capture.depth[576 // 2, 640 // 2]
 
