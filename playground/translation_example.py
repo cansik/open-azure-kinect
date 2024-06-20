@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import dataclass
 from typing import Optional
 
 import cv2
@@ -6,6 +7,49 @@ import numpy as np
 
 from openk4a.calibration import CameraCalibration
 from openk4a.playback import OpenK4APlayback
+from playground.utils import annotate_points
+
+
+@dataclass
+class DistortionMapping:
+    x_mapping: np.ndarray
+    y_mapping: np.ndarray
+
+    def transform(self, points: np.ndarray) -> np.ndarray:
+        points_int32 = points.astype(np.int32)
+        x_values = np.array([self.x_mapping[y, x] for x, y in points_int32])
+        y_values = np.array([self.y_mapping[y, x] for x, y in points_int32])
+
+        return np.hstack((x_values.reshape(-1, 1), y_values.reshape(-1, 1)))
+
+    def remap(self, image: np.ndarray, interpolation_method: int = cv2.INTER_LINEAR):
+        return cv2.remap(image, self.x_mapping, self.y_mapping, interpolation_method)
+
+
+def compute_distortion_mapping(calibration: CameraCalibration) -> DistortionMapping:
+    x_map, y_map = cv2.initUndistortRectifyMap(
+        calibration.intrinsics.camera_matrix,
+        calibration.intrinsics.distortion_coefficients,
+        np.eye(3),
+        calibration.intrinsics.camera_matrix,
+        (calibration.width, calibration.height),
+        5,  # CV_32FC1
+    )
+
+    return DistortionMapping(x_map, y_map)
+
+
+def compute_inverse_distortion_mapping(calibration: CameraCalibration) -> DistortionMapping:
+    x_map, y_map = cv2.initInverseRectificationMap(
+        calibration.intrinsics.camera_matrix,
+        calibration.intrinsics.distortion_coefficients,
+        np.eye(3),
+        calibration.intrinsics.camera_matrix,
+        (calibration.width, calibration.height),
+        5,  # CV_32FC1
+    )
+
+    return DistortionMapping(x_map, y_map)
 
 
 def concat_images_horizontally(*images: np.ndarray, target_height: int = 480):
@@ -50,24 +94,6 @@ def normalize_image(image: np.ndarray, min_value: float = 0, max_value: float = 
     return img
 
 
-def undistort_points(points: np.ndarray, camera_matrix: np.ndarray, distortion_coefficients: np.ndarray) -> np.ndarray:
-    """
-    Undistort points using the camera matrix and distortion coefficients.
-
-    Args:
-        points (np.ndarray): Array of 2D points (Nx2) to be undistorted.
-        camera_matrix (np.ndarray): Camera matrix (3x3).
-        distortion_coefficients (np.ndarray): Distortion coefficients (1xN).
-
-    Returns:
-        np.ndarray: Array of undistorted 2D points (Nx2).
-    """
-    points = points.reshape(-1, 1, 2)  # Reshape for OpenCV function
-    undistorted_points = cv2.undistortPoints(points, camera_matrix, distortion_coefficients, P=camera_matrix)
-    undistorted_points = undistorted_points.reshape(-1, 2)  # Reshape back to Nx2
-    return undistorted_points
-
-
 def calculate_homography(K1: np.ndarray, K2: np.ndarray, R: np.ndarray, t: np.ndarray, Z0: float) -> np.ndarray:
     """
     Calculate the homography matrix between two cameras.
@@ -89,6 +115,43 @@ def calculate_homography(K1: np.ndarray, K2: np.ndarray, R: np.ndarray, t: np.nd
     H = K2 @ (R - (t[:, None] @ n[None, :]) / Z0) @ np.linalg.inv(K1)
 
     return H
+
+
+def transform_points_with_cv(points: np.ndarray,
+                             calib_a: CameraCalibration,
+                             calib_b: CameraCalibration,
+                             Z0: float) -> np.ndarray:
+
+    # Extract intrinsics
+    K_a = calib_a.intrinsics.camera_matrix
+    K_b = calib_b.intrinsics.camera_matrix
+
+    # Extract extrinsics
+    R_a_to_b = calib_b.extrinsics.rotation @ calib_a.extrinsics.rotation.T
+    T_a_to_b = (calib_b.extrinsics.translation[0] * 1000) - R_a_to_b @ (calib_a.extrinsics.translation[0] * 1000)
+
+    # Invert intrinsic matrix of camera A
+    K_a_inv = np.linalg.inv(K_a)
+
+    # Convert points to homogeneous coordinates
+    points_h = np.hstack((points, np.ones((points.shape[0], 1))))
+
+    # Normalize points (from image coordinates to camera coordinates)
+    points_cam_a = K_a_inv @ points_h.T
+
+    # Assume Z0 depth and convert normalized points to 3D points
+    points_3d_a = points_cam_a * Z0
+
+    # Transform points from camera A coordinate system to camera B coordinate system
+    points_3d_b = (R_a_to_b @ points_3d_a) + T_a_to_b[:, np.newaxis]
+
+    # Project 3D points to image plane of camera B
+    points_h_b = K_b @ points_3d_b
+
+    # Normalize the points
+    points_b = points_h_b[:2, :] / points_h_b[2, :]
+
+    return points_b.T
 
 
 def transform_points_between_cameras_using_homography(points: np.ndarray,
@@ -121,14 +184,11 @@ def transform_points_between_cameras_using_homography(points: np.ndarray,
     R_BA = R_B @ np.linalg.inv(R_A)
     t_BA = t_B - R_BA @ t_A
 
-    # Undistort the points in the first camera's image plane
-    undistorted_points_a = undistort_points(points, K1, D1)
-
     # Calculate the homography matrix
     H = calculate_homography(K1, K2, R_BA, t_BA, Z0)
 
     # Convert undistorted points to homogeneous coordinates
-    undistorted_points_h = np.hstack([undistorted_points_a, np.ones((undistorted_points_a.shape[0], 1))])
+    undistorted_points_h = np.hstack([points, np.ones((points.shape[0], 1))])
 
     # Transform points using the homography matrix
     transformed_points_h = (H @ undistorted_points_h.T).T
@@ -136,11 +196,7 @@ def transform_points_between_cameras_using_homography(points: np.ndarray,
     # Convert back to non-homogeneous coordinates
     transformed_points = transformed_points_h[:, :2] / transformed_points_h[:, 2][:, np.newaxis]
 
-    # Distort the transformed points using the second camera's distortion coefficients
-    transformed_points_distorted = cv2.undistortPoints(transformed_points, K2, D2, P=K2)
-    transformed_points_distorted = transformed_points_distorted.reshape(-1, 2)
-
-    return transformed_points_distorted
+    return transformed_points
 
 
 def main():
@@ -152,23 +208,51 @@ def main():
     azure.is_looping = True
     azure.open()
 
-    while capture := azure.read():
-        face_bbox = predict_face_bounding_box(capture.color)
+    points_first_frame = np.array([
+        [960, 540],
+        [694, 444],
+        [746, 553],
+        [1096, 514],
+        [968, 305],
 
+        [975, 529],
+        [976, 482],
+        [975, 437],
+        [974, 394],
+        [974, 394],
+        [974, 350],
+    ], dtype=np.float32)
+
+    while capture := azure.read():
         preview_color = cv2.cvtColor(capture.color, cv2.COLOR_BGR2RGB)
         preview_infrared = cv2.cvtColor(normalize_image(capture.ir), cv2.COLOR_GRAY2BGR)
+
+        color_distortion_mapping = compute_distortion_mapping(azure.color_calibration)
+        inv_color_distortion_mapping = compute_inverse_distortion_mapping(azure.color_calibration)
+        infrared_distortion_mapping = compute_distortion_mapping(azure.depth_calibration)
+
+        preview_color = color_distortion_mapping.remap(preview_color)
+        preview_infrared = infrared_distortion_mapping.remap(preview_infrared)
+
+        # face_bbox = predict_face_bounding_box(preview_color)
+        face_bbox = inv_color_distortion_mapping.transform(points_first_frame)
+
+        distance = capture.depth[576 // 2, 640 // 2]
 
         if face_bbox is not None:
             infrared_face_bbox = transform_points_between_cameras_using_homography(face_bbox,
                                                                                    azure.color_calibration,
                                                                                    azure.depth_calibration, 1)
+            infrared_face_bbox = transform_points_with_cv(face_bbox, azure.color_calibration, azure.depth_calibration,
+                                                          distance / 1000)
 
             # annotate infrared image
-            infrared_face_bbox = infrared_face_bbox.astype(np.uint32)
-            cv2.rectangle(preview_infrared, infrared_face_bbox[0], infrared_face_bbox[1], (0, 255, 0), 4)
+            annotate_points(preview_color, face_bbox)
+            annotate_points(preview_infrared, infrared_face_bbox)
+            # cv2.rectangle(preview_infrared, infrared_face_bbox[0], infrared_face_bbox[1], (0, 255, 0), 4)
 
         cv2.imshow("Result", concat_images_horizontally(preview_color, preview_infrared))
-        cv2.waitKey(1)
+        cv2.waitKey(0)
 
     azure.close()
 
