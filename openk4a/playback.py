@@ -166,6 +166,8 @@ class OpenK4APlayback:
             ], dtype=np.float32)
 
             # distortion coefficients in opencv-compatible format
+            # https://microsoft.github.io/Azure-Kinect-Sensor-SDK/master/structk4a__calibration__intrinsic__parameters__t_1_1__param.html
+            # k1, k2, p1, p2, k3, k4, k5, k6
             distortion_coefficients = np.array([params[4], params[5], params[13], params[12], *params[6:10]],
                                                dtype=np.float32)
             metric_radius = float(cam_info["MetricRadius"])
