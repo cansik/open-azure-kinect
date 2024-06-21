@@ -32,7 +32,7 @@ def annotate_points(image: np.ndarray, points: np.ndarray, marker_type: int = cv
     size = max(1, round(10 * factor))
     thickness = min(4, max(1, round(2 * factor)))
 
-    image_points = points.astype(np.int32)
+    image_points = np.round(points).astype(np.int32)
     for i, point in enumerate(image_points):
         color = COLOR_SEQUENCE[i % len(COLOR_SEQUENCE)]
         cv2.drawMarker(image, point, color, markerType=marker_type, markerSize=size, thickness=thickness)
