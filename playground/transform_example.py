@@ -37,15 +37,19 @@ def main():
         # opencv convertions
         depth_values = np.full((len(color_points), 1), center_depth)
         depth_points_sp = transform.transform_2d_color_to_depth_cv2(color_points, depth_values)
+        depth_points_optimise_sp = transform.optimized_transform_2d_color_to_depth_cv2(color_points, depth_values, capture.depth)
         color_points_sp = transform.transform_2d_depth_to_color_cv2(depth_points_sp, capture.depth)
 
         infrared2 = infrared.copy()
+        infrared2_opt = infrared.copy()
 
         annotate_points(color, color_points)
         annotate_points(infrared, depth_points)
         annotate_points(infrared2, depth_points_sp)
+        annotate_points(infrared2_opt, depth_points_optimise_sp)
 
-        cv2.imshow("Result", concat_images_horizontally(color, infrared, infrared2, target_height=640))
+        cv2.imshow("Result", concat_images_horizontally(color, infrared, target_height=640))
+        cv2.imshow("Result SP", concat_images_horizontally(infrared2, infrared2_opt, target_height=640))
         cv2.waitKey(0)
 
     azure.close()

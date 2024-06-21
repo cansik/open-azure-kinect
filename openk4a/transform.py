@@ -144,13 +144,13 @@ class CameraTransform:
     def optimized_transform_2d_color_to_depth_cv2(self, uv: np.ndarray,
                                                   depth_values_in_mm: np.ndarray,
                                                   depth_map: np.ndarray) -> np.ndarray:
-        initial_depth_uvs = self.transform_2d_color_to_depth_cv2(uv, depth_values_in_mm)
-        depth_uvs_int = np.round(initial_depth_uvs).astype(np.int32)
-        depth_values = depth_map[np.ix_(*np.flip(depth_uvs_int).T)]
+        estimated_depth_uvs = self.transform_2d_color_to_depth_cv2(uv, depth_values_in_mm)
 
+        depth_uvs_int = np.round(estimated_depth_uvs).astype(np.int32)
+        depth_values = np.array([depth_map[y, x] for x, y in depth_uvs_int]).reshape(-1, 1)
+        accurate_depth_uvs = self.transform_2d_color_to_depth_cv2(uv, depth_values)
 
-
-        return self.transform_2d_color_to_depth_cv2(uv, depth_values)
+        return accurate_depth_uvs
 
 
     def transform_2d_color_to_depth_cv2(self, uv: np.ndarray, depth_values_in_mm: np.ndarray) -> np.ndarray:
