@@ -141,6 +141,18 @@ class CameraTransform:
         return self._transform_2d_2d(uv, self._H_color_to_depth,
                                      self._color_inv_distortion_mapping, self._depth_distortion_mapping)
 
+    def optimized_transform_2d_color_to_depth_cv2(self, uv: np.ndarray,
+                                                  depth_values_in_mm: np.ndarray,
+                                                  depth_map: np.ndarray) -> np.ndarray:
+        initial_depth_uvs = self.transform_2d_color_to_depth_cv2(uv, depth_values_in_mm)
+        depth_uvs_int = np.round(initial_depth_uvs).astype(np.int32)
+        depth_values = depth_map[np.ix_(*np.flip(depth_uvs_int).T)]
+
+
+
+        return self.transform_2d_color_to_depth_cv2(uv, depth_values)
+
+
     def transform_2d_color_to_depth_cv2(self, uv: np.ndarray, depth_values_in_mm: np.ndarray) -> np.ndarray:
         # todo: implement epipolar line optimisation from k4a for more accurate result
         # uv on color: goal uv on depth
@@ -148,15 +160,14 @@ class CameraTransform:
         # 2d color -> depth => min_depth, max_depth
         # https://github.com/microsoft/Azure-Kinect-Sensor-SDK/blob/develop/src/transformation/transformation.c#L325-L326
 
-        # uv_int = np.round(uv).astype(np.int32)
-        # depth_values = depth_map[np.ix_(*np.flip(uv_int).T)]
-
-        # todo: use iterative method
         # todo: find out, what the reprojection error is here that is optimized?
-        color_camera_points = cv2.undistortPoints(
+        color_camera_points = cv2.undistortPointsIter(
             uv.reshape(-1, 1, 2),
             self._color_calibration.intrinsics.camera_matrix,
-            self._color_calibration.intrinsics.distortion_coefficients
+            self._color_calibration.intrinsics.distortion_coefficients,
+            None,
+            None,
+            (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 20, 1e-22)
         )
 
         homogeneous_points = cv2.convertPointsToHomogeneous(color_camera_points).reshape(-1, 3)
@@ -169,14 +180,44 @@ class CameraTransform:
         rotation_vector, _ = cv2.Rodrigues(rotation_matrix)
         translation_vector = (self._color_calibration.extrinsics.translation * -1000)
 
-        print(homogeneous_points[0, 2])
-        print(translation_vector[0, 0])
-
         distorted_transformed_points, _ = cv2.projectPoints(
             homogeneous_points.reshape(-1, 1, 3),
             rotation_vector, translation_vector,
             self._depth_calibration.intrinsics.camera_matrix,
             self._depth_calibration.intrinsics.distortion_coefficients
+        )
+
+        return distorted_transformed_points.reshape(-1, 2)
+
+    def transform_2d_depth_to_color_cv2(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
+        depth_camera_points = cv2.undistortPointsIter(
+            uv.reshape(-1, 1, 2),
+            self._depth_calibration.intrinsics.camera_matrix,
+            self._depth_calibration.intrinsics.distortion_coefficients,
+            None,
+            None,
+            (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 20, 1e-22)
+        )
+
+        # find depth values
+        depth_uvs_int = np.round(uv).astype(np.int32)
+        depth_values = np.array([depth_map[y, x] for x, y in depth_uvs_int]).reshape(-1, 1)
+
+        homogeneous_points = cv2.convertPointsToHomogeneous(depth_camera_points).reshape(-1, 3)
+
+        # set depth value to actual depth (multiply all components with depth / 1000)
+        homogeneous_points *= depth_values / 1000
+
+        # get rotation and translation
+        rotation_matrix = self._color_calibration.extrinsics.rotation.astype(np.float64)
+        rotation_vector, _ = cv2.Rodrigues(rotation_matrix)
+        translation_vector = (self._color_calibration.extrinsics.translation * 1000)
+
+        distorted_transformed_points, _ = cv2.projectPoints(
+            homogeneous_points.reshape(-1, 1, 3),
+            rotation_vector, translation_vector,
+            self._color_calibration.intrinsics.camera_matrix,
+            self._color_calibration.intrinsics.distortion_coefficients
         )
 
         return distorted_transformed_points.reshape(-1, 2)

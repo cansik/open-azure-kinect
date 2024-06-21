@@ -34,8 +34,10 @@ def main():
 
         depth_points = transform.transform_2d_color_to_depth(color_points)
 
+        # opencv convertions
         depth_values = np.full((len(color_points), 1), center_depth)
         depth_points_sp = transform.transform_2d_color_to_depth_cv2(color_points, depth_values)
+        color_points_sp = transform.transform_2d_depth_to_color_cv2(depth_points_sp, capture.depth)
 
         infrared2 = infrared.copy()
 
