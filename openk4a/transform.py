@@ -141,7 +141,7 @@ class CameraTransform:
         return self._transform_2d_2d(uv, self._H_color_to_depth,
                                      self._color_inv_distortion_mapping, self._depth_distortion_mapping)
 
-    def transform_2d_color_to_depth_cv2(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
+    def transform_2d_color_to_depth_cv2(self, uv: np.ndarray, depth_values_in_mm: np.ndarray) -> np.ndarray:
         # todo: implement epipolar line optimisation from k4a for more accurate result
         # uv on color: goal uv on depth
         # pinhole model -> depth
@@ -150,7 +150,6 @@ class CameraTransform:
 
         # uv_int = np.round(uv).astype(np.int32)
         # depth_values = depth_map[np.ix_(*np.flip(uv_int).T)]
-        center_depth = int(depth_map[576 // 2, 640 // 2])
 
         # todo: use iterative method
         # todo: find out, what the reprojection error is here that is optimized?
@@ -163,7 +162,7 @@ class CameraTransform:
         homogeneous_points = cv2.convertPointsToHomogeneous(color_camera_points).reshape(-1, 3)
 
         # set depth value to actual depth (multiply all components with depth / 1000)
-        homogeneous_points *= center_depth / 1000
+        homogeneous_points *= depth_values_in_mm / 1000
 
         # get rotation and translation
         rotation_matrix = np.linalg.inv(self._color_calibration.extrinsics.rotation).astype(np.float64)

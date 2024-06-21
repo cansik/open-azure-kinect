@@ -1,6 +1,7 @@
 import argparse
 
 import cv2
+import numpy as np
 
 from openk4a.playback import OpenK4APlayback
 from openk4a.transform import CameraTransform
@@ -32,7 +33,9 @@ def main():
         color_points = detections.corners[:, :, 0].reshape(-1, 2)
 
         depth_points = transform.transform_2d_color_to_depth(color_points)
-        depth_points_sp = transform.transform_2d_color_to_depth_cv2(color_points, capture.depth)
+
+        depth_values = np.full((len(color_points), 1), center_depth)
+        depth_points_sp = transform.transform_2d_color_to_depth_cv2(color_points, depth_values)
 
         infrared2 = infrared.copy()
 
