@@ -330,6 +330,10 @@ def analyze_capture(azure: OpenK4APlayback, capture: OpenK4ACapture):
     opencv_inv_distortion = inv_color_distortion_mapping.transform(point)[0]
     opencv_distortion = color_distortion_mapping.transform(point)[0]
 
+    undistorted_points = cv2.undistortImagePoints(point.reshape(-1, 1, 2),
+                                                  azure.color_calibration.intrinsics.camera_matrix,
+                                                  azure.color_calibration.intrinsics.distortion_coefficients)
+
     # https://github.com/microsoft/Azure-Kinect-Sensor-SDK/issues/983
     size = (azure.color_calibration.width, azure.color_calibration.height)
     newK, _ = cv2.getOptimalNewCameraMatrix(azure.color_calibration.intrinsics.camera_matrix,

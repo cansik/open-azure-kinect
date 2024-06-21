@@ -73,9 +73,9 @@ class OpenK4APlayback:
             if stream.title == OpenK4AColorStreamName:
                 capture.color = data[0]
             elif stream.title == OpenK4ADepthStreamName:
-                capture.depth = data[0]
+                capture.depth = data[0].squeeze()
             elif stream.title == OpenK4AInfraredStreamName:
-                capture.ir = data[0]
+                capture.ir = data[0].squeeze()
 
         return capture
 

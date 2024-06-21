@@ -99,6 +99,22 @@ def compute_homography_from_calib(calib_a: CameraCalibration, calib_b: CameraCal
     )
 
 
+def project_pixels_to_points(uv, calibration: CameraCalibration):
+    i = calibration.intrinsics
+    xy = [0, 0]
+    xy[0] = (uv[0] - i.cx) / i.fx
+    xy[1] = (uv[1] - i.cy) / i.fy
+    return xy
+
+
+def unproject_points_to_pixels(xy, calibration: CameraCalibration):
+    i = calibration.intrinsics
+    undistorted_uv = [0, 0]
+    undistorted_uv[0] = xy[0] * i.fx + i.cx
+    undistorted_uv[1] = xy[1] * i.fy + i.cy
+    return undistorted_uv
+
+
 class CameraTransform:
     def __init__(self, color_calibration: CameraCalibration, depth_calibration: CameraCalibration,
                  distance_in_mm: float = 1000):
@@ -125,17 +141,33 @@ class CameraTransform:
         return self._transform_2d_2d(uv, self._H_color_to_depth,
                                      self._color_inv_distortion_mapping, self._depth_distortion_mapping)
 
+    def transform_2d_color_to_depth_sp(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
+        color_points = np.array([project_pixels_to_points(c, self._color_calibration) for c in uv])
+
+        undistorted_points = cv2.undistortPoints(color_points.reshape(-1, 1, 2),
+                                                 self._color_calibration.intrinsics.camera_matrix,
+                                                 self._color_calibration.intrinsics.distortion_coefficients)
+
+        homogenous_points = cv2.convertPointsToHomogeneous(undistorted_points)
+
+        projected_points, _ = cv2.projectPoints(homogenous_points,
+                                                self._color_calibration.extrinsics.rotation.astype(np.float64),
+                                                self._color_calibration.extrinsics.translation.reshape(3, 1),
+                                                self._color_calibration.intrinsics.camera_matrix,
+                                                self._color_calibration.intrinsics.distortion_coefficients)
+        return projected_points.reshape(-1, 2)
+
     def transform_2d_depth_to_color(self, uv: np.ndarray) -> np.ndarray:
         return self._transform_2d_2d(uv, self._H_depth_to_color,
                                      self._depth_inv_distortion_mapping, self._color_distortion_mapping)
 
     def transform_depth_to_3d(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         uv_int = np.round(uv).astype(np.int32)
-        depth_values = depth_map[uv_int]
+        depth_values = depth_map[np.ix_(*np.flip(uv_int).T)]
         object_points = np.hstack((uv, depth_values))
-        points_3d, jacobian = cv2.projectPoints(object_points, np.eye(1), np.zeros(3),
-                                                self._depth_calibration.intrinsics.camera_matrix,
-                                                self._depth_calibration.intrinsics.distortion_coefficients)
+        points_3d, _ = cv2.projectPoints(object_points, np.eye(1), np.zeros(3),
+                                         self._depth_calibration.intrinsics.camera_matrix,
+                                         self._depth_calibration.intrinsics.distortion_coefficients)
         return points_3d
 
     def transform_color_to_3d(self, uv: np.ndarray) -> np.ndarray:

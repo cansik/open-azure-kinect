@@ -32,11 +32,15 @@ def main():
         color_points = detections.corners[:, :, 0].reshape(-1, 2)
 
         depth_points = transform.transform_2d_color_to_depth(color_points)
+        depth_points_sp = transform.transform_2d_color_to_depth_sp(color_points, capture.depth)
+
+        infrared2 = infrared.copy()
 
         annotate_points(color, color_points)
         annotate_points(infrared, depth_points)
+        annotate_points(infrared2, depth_points_sp)
 
-        cv2.imshow("Result", concat_images_horizontally(color, infrared))
+        cv2.imshow("Result", concat_images_horizontally(color, infrared, infrared2, target_height=640))
         cv2.waitKey(0)
 
     azure.close()
