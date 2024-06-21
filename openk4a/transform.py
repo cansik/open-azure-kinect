@@ -141,7 +141,19 @@ class CameraTransform:
         return self._transform_2d_2d(uv, self._H_color_to_depth,
                                      self._color_inv_distortion_mapping, self._depth_distortion_mapping)
 
-    def transform_2d_color_to_depth_sp(self, uv: np.ndarray) -> np.ndarray:
+    def transform_2d_color_to_depth_cv2(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
+        # todo: implement epipolar line optimisation from k4a for more accurate result
+        # uv on color: goal uv on depth
+        # pinhole model -> depth
+        # 2d color -> depth => min_depth, max_depth
+        # https://github.com/microsoft/Azure-Kinect-Sensor-SDK/blob/develop/src/transformation/transformation.c#L325-L326
+
+        # uv_int = np.round(uv).astype(np.int32)
+        # depth_values = depth_map[np.ix_(*np.flip(uv_int).T)]
+        center_depth = int(depth_map[576 // 2, 640 // 2])
+
+        # todo: use iterative method
+        # todo: find out, what the reprojection error is here that is optimized?
         color_camera_points = cv2.undistortPoints(
             uv.reshape(-1, 1, 2),
             self._color_calibration.intrinsics.camera_matrix,
@@ -150,38 +162,25 @@ class CameraTransform:
 
         homogeneous_points = cv2.convertPointsToHomogeneous(color_camera_points).reshape(-1, 3)
 
-        # todo: set depth value to actual depth
-        homogeneous_points[:, 2] = 1.0
+        # set depth value to actual depth (multiply all components with depth / 1000)
+        homogeneous_points *= center_depth / 1000
 
         # get rotation and translation
         rotation_matrix = np.linalg.inv(self._color_calibration.extrinsics.rotation).astype(np.float64)
-        translation_vector = (self._color_calibration.extrinsics.translation.reshape(3, 1) * -1000)
+        rotation_vector, _ = cv2.Rodrigues(rotation_matrix)
+        translation_vector = (self._color_calibration.extrinsics.translation * -1000)
+
+        print(homogeneous_points[0, 2])
+        print(translation_vector[0, 0])
 
         distorted_transformed_points, _ = cv2.projectPoints(
-            homogeneous_points,
-            rotation_matrix, translation_vector,
+            homogeneous_points.reshape(-1, 1, 3),
+            rotation_vector, translation_vector,
             self._depth_calibration.intrinsics.camera_matrix,
             self._depth_calibration.intrinsics.distortion_coefficients
         )
 
         return distorted_transformed_points.reshape(-1, 2)
-
-        # project pixels into 3d camera space
-        color_points = np.array([project_pixels_to_points(c, self._color_calibration) for c in uv])
-        homogeneous_points = cv2.convertPointsToHomogeneous(color_points).reshape(-1, 3)
-
-        # todo: reverse the distortion for the color_points (already normalized)
-
-        # apply rotation and translation in 3d space
-        rotation_matrix = self._color_calibration.extrinsics.rotation
-        translation_vector = self._color_calibration.extrinsics.translation
-        rotated_points = np.dot(np.linalg.inv(rotation_matrix), homogeneous_points.T).T
-        transformed_points = rotated_points - (translation_vector.squeeze() * 1000)
-
-        # todo: apply the distortion for the transformed_points (still normalized)
-
-        # project pixels from 3d camera space back to 2d image space
-        return np.array([unproject_points_to_pixels(c, self._depth_calibration) for c in transformed_points[:, :2]])
 
     def transform_2d_depth_to_color(self, uv: np.ndarray) -> np.ndarray:
         return self._transform_2d_2d(uv, self._H_depth_to_color,
