@@ -32,7 +32,7 @@ def main():
         color_points = detections.corners[:, :, 0].reshape(-1, 2)
 
         depth_points = transform.transform_2d_color_to_depth(color_points)
-        depth_points_sp = transform.transform_2d_color_to_depth_sp(color_points, capture.depth)
+        depth_points_sp = transform.transform_2d_color_to_depth_sp(color_points)
 
         infrared2 = infrared.copy()
 
