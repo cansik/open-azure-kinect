@@ -152,7 +152,6 @@ class CameraTransform:
 
         return accurate_depth_uvs
 
-
     def transform_2d_color_to_depth_cv2(self, uv: np.ndarray, depth_values_in_mm: np.ndarray) -> np.ndarray:
         # todo: implement epipolar line optimisation from k4a for more accurate result
         # uv on color: goal uv on depth
