@@ -11,6 +11,7 @@ def main():
     args = parser.parse_args()
 
     azure = OpenK4APlayback(args.input)
+    azure.is_looping = True
     azure.open()
 
     for stream in azure.streams:
@@ -20,7 +21,7 @@ def main():
 
     while capture := azure.read():
         cv2.imshow("Demo", cv2.cvtColor(capture.color, cv2.COLOR_BGR2RGB))
-        cv2.waitKey(1)
+        cv2.waitKey(30)
 
     azure.close()
 

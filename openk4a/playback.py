@@ -2,7 +2,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Union, Optional, Dict, List, Sequence, Iterator
+from typing import Union, Optional, Dict, List, Sequence, Iterator, Any
 
 import ffmpegio
 import numpy as np
@@ -28,7 +28,7 @@ class OpenK4APlayback:
         self.streams: List[OpenK4AVideoStream] = []
         self._stream_map: Dict[str, OpenK4AVideoStream] = {}
 
-        self.block_size: int = 1
+        self.block_size: Optional[int] = 1
         self._video_reader: Optional[AviMediaReader] = None
         self._frame_iterator: Optional[Iterator] = None
 
@@ -47,10 +47,17 @@ class OpenK4APlayback:
         streams = [s.stream_name for s in self.streams]
         pix_fmts = {f"pix_fmt:{s.stream_name}": s.pixel_format for s in self.streams}
 
+        options: Dict[str, Any] = {
+            **pix_fmts
+        }
+
+        if self.is_looping:
+            options["stream_loop_in"] = -1
+
         self._video_reader = AviMediaReader(str(self._path),
                                             map=streams,
                                             blocksize=self.block_size,
-                                            **pix_fmts)
+                                            **options)
         self._frame_iterator = iter(self._video_reader)
 
     def read(self) -> Optional[OpenK4ACapture]:
@@ -61,9 +68,10 @@ class OpenK4APlayback:
             if not self.is_looping:
                 return None
 
-            # create new iterator to loop through frames
-            self._frame_iterator = iter(self._video_reader)
             frames = next(self._frame_iterator, None)
+
+            if frames is None:
+                return None
 
         capture = OpenK4ACapture()
 
