@@ -22,6 +22,7 @@ In order to load an MKV file, it is necessary to create a new instance of the `O
 from openk4a.playback import OpenK4APlayback
 
 azure = OpenK4APlayback("my-file.mkv")
+azure.is_looping = True # set loop option if necessary
 azure.open()
 ```
 
