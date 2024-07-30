@@ -29,6 +29,7 @@ class OpenK4APlayback:
         self._stream_map: Dict[str, OpenK4AVideoStream] = {}
 
         self.block_size: Optional[int] = 1
+        self.queue_size: Optional[int] = 6
         self._video_reader: Optional[AviMediaReader] = None
         self._frame_iterator: Optional[Iterator] = None
 
@@ -57,10 +58,15 @@ class OpenK4APlayback:
         self._video_reader = AviMediaReader(str(self._path),
                                             map=streams,
                                             blocksize=self.block_size,
+                                            queuesize=self.queue_size,
                                             **options)
         self._frame_iterator = iter(self._video_reader)
 
     def read(self) -> Optional[OpenK4ACapture]:
+        if not self._frame_iterator:
+            # ffmpeg is not alive anymore
+            return None
+
         frames: Optional[Dict[str, np.ndarray]] = next(self._frame_iterator, None)
 
         # handle if no frame could be read
@@ -76,6 +82,9 @@ class OpenK4APlayback:
         capture = OpenK4ACapture()
 
         for stream_name, data in frames.items():
+            if len(data) == 0:
+                return None
+
             stream = self._stream_map[stream_name]
 
             if stream.title == OpenK4AColorStreamName:
@@ -99,11 +108,11 @@ class OpenK4APlayback:
 
     def _extract_stream_infos(self):
         # probe file to find out which streams are available
-        stream_infos = ffmpegio.probe.streams_basic(str(self._path))
+        stream_infos = ffmpegio.probe.full_details(str(self._path))
 
         # create stream descriptions
         self.streams.clear()
-        for stream_info in stream_infos:
+        for stream_info in stream_infos["streams"]:
             if stream_info["codec_type"] == "video":
                 stream = OpenK4AVideoStream(
                     index=int(stream_info["index"]),

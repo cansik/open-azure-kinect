@@ -1,1 +1,1 @@
-ffmpegio~=0.9.0
+ffmpegio~=0.10.0

@@ -11,7 +11,7 @@ def main():
     args = parser.parse_args()
 
     azure = OpenK4APlayback(args.input)
-    azure.is_looping = True
+    azure.is_looping = False
     azure.open()
 
     for stream in azure.streams:
