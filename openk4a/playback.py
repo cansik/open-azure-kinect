@@ -25,6 +25,9 @@ class OpenK4APlayback:
         self.loglevel = loglevel
         self._calibration_raw: Optional[Dict] = None
 
+        self._duration_in_ms: int = 0
+        self._current_frame_index: int = -1
+
         self.streams: List[OpenK4AVideoStream] = []
         self._stream_map: Dict[str, OpenK4AVideoStream] = {}
 
@@ -52,8 +55,9 @@ class OpenK4APlayback:
             **pix_fmts
         }
 
-        if self.is_looping:
-            options["stream_loop_in"] = -1
+        # native looping (not used atm)
+        # if self.is_looping:
+        #     options["stream_loop_in"] = -1
 
         self._video_reader = AviMediaReader(str(self._path),
                                             map=streams,
@@ -61,6 +65,7 @@ class OpenK4APlayback:
                                             queuesize=self.queue_size,
                                             **options)
         self._frame_iterator = iter(self._video_reader)
+        self._current_frame_index = -1
 
     def read(self) -> Optional[OpenK4ACapture]:
         if not self._frame_iterator:
@@ -94,6 +99,7 @@ class OpenK4APlayback:
             elif stream.title == OpenK4AInfraredStreamName:
                 capture.ir = data[0].squeeze()
 
+        self._current_frame_index += 1
         return capture
 
     def close(self):
@@ -109,6 +115,8 @@ class OpenK4APlayback:
     def _extract_stream_infos(self):
         # probe file to find out which streams are available
         stream_infos = ffmpegio.probe.full_details(str(self._path))
+
+        self._duration_in_ms = int(float(stream_infos["format"]["duration"]) * 1000)
 
         # create stream descriptions
         self.streams.clear()
@@ -250,3 +258,17 @@ class OpenK4APlayback:
     @property
     def color_resolution(self) -> ColorResolution:
         return self._color_resolution
+
+    @property
+    def duration_ms(self) -> int:
+        return self._duration_in_ms
+
+    @property
+    def timestamp_ms(self) -> int:
+        frame_index = max(0, self._current_frame_index)
+        stream = self._stream_map[self.streams[0].stream_name]
+        return round(1000 / stream.frame_rate * frame_index)
+
+    @property
+    def raw_video_reader(self) -> Optional[AviMediaReader]:
+        return self._video_reader
