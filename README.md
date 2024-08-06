@@ -1,6 +1,6 @@
 # Open Azure Kinect [![PyPI](https://img.shields.io/pypi/v/open-azure-kinect)](https://pypi.org/project/open-azure-kinect/)
 
-Open playback functions for Azure Kinect.
+Easy-to-use playback library for Azure Kinect MKV files.
 
 It is possible to playback [Azure Kinect](https://github.com/microsoft/Azure-Kinect-Sensor-SDK) videos files (mkv) without using the official SDK. This allows the software to be used on systems where the depth engine is not implemented, such as MacOS. The library currently **only** supports the **playback** of mkv files and does **not provide direct access** to the Azure Kinect device.
 
@@ -58,3 +58,6 @@ pip install -r requirements.txt
 ```
 
 There is already an example script [demo.py](demo.py) which provides insights in how to use the library.
+
+## About
+Copyright (c) 2024 Florian Bruggisser
