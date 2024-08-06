@@ -12,7 +12,7 @@ The following functions are currently supported:
 
 - [x] Reading colour, infrared and depth stream from mkv
 - [x] Reading and parsing calibration data from mkv
-- [/] Image alignment and point transformation (⚠️not as accurate as the Azure Kinect SDK)
+- [ ] Image alignment and point transformation (⚠️not as accurate as the Azure Kinect SDK)
 
 ## Installation
 
