@@ -105,6 +105,10 @@ class OpenK4APlayback:
     def close(self):
         self._video_reader.close()
 
+    def _reset_stream(self):
+        self.close()
+        self.open()
+
     def __enter__(self):
         self.open()
         return self
@@ -264,11 +268,26 @@ class OpenK4APlayback:
         return self._duration_in_ms
 
     @property
+    def _ms_per_frame(self) -> float:
+        stream = self._stream_map[self.streams[0].stream_name]
+        return 1000 / stream.frame_rate
+
+    @property
     def timestamp_ms(self) -> int:
         frame_index = max(0, self._current_frame_index)
-        stream = self._stream_map[self.streams[0].stream_name]
-        return round(1000 / stream.frame_rate * frame_index)
+        return round(self._ms_per_frame * frame_index)
 
     @property
     def raw_video_reader(self) -> Optional[AviMediaReader]:
         return self._video_reader
+
+    def seek(self, target_ts_ms: int):
+        if target_ts_ms < self.timestamp_ms:
+            self._reset_stream()
+
+        target_ts_ms = min(target_ts_ms, self.duration_ms)
+
+        while self.timestamp_ms + self._ms_per_frame < target_ts_ms:
+            result = self.read()
+            if result is None:
+                break
