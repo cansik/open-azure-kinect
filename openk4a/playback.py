@@ -1,4 +1,5 @@
 import json
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
@@ -68,7 +69,7 @@ class OpenK4APlayback:
         self._current_frame_index = -1
 
     def read(self) -> Optional[OpenK4ACapture]:
-        if not self._frame_iterator:
+        if not self._frame_iterator and not self.is_looping:
             # ffmpeg is not alive anymore
             return None
 
@@ -79,6 +80,7 @@ class OpenK4APlayback:
             if not self.is_looping:
                 return None
 
+            self._reset_stream()
             frames = next(self._frame_iterator, None)
 
             if frames is None:
@@ -87,10 +89,11 @@ class OpenK4APlayback:
         capture = OpenK4ACapture()
 
         for stream_name, data in frames.items():
-            if len(data) == 0:
-                return None
-
             stream = self._stream_map[stream_name]
+
+            if len(data) == 0:
+                logging.info(f"No {stream.title} data in frameset.")
+                continue
 
             if stream.title == OpenK4AColorStreamName:
                 capture.color = data[0]

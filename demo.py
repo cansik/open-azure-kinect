@@ -21,8 +21,10 @@ def main():
 
     while capture := azure.read():
         print(f"ts: {(azure.timestamp_ms / azure.duration_ms) * 100:.2f}%")
-        cv2.imshow("Demo", cv2.cvtColor(capture.color, cv2.COLOR_BGR2RGB))
-        cv2.waitKey(1)
+
+        if capture.has_color:
+            cv2.imshow("Demo", cv2.cvtColor(capture.color, cv2.COLOR_BGR2RGB))
+            cv2.waitKey(1)
 
     azure.close()
 
