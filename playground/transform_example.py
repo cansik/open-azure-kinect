@@ -6,8 +6,7 @@ import numpy as np
 from openk4a.playback import OpenK4APlayback
 from openk4a.transform import CameraTransform
 from playground.CharucoDetectionHelper import CharucoDetectionHelper
-from playground.translation_example import normalize_image
-from playground.utils import concat_images_horizontally, annotate_points
+from playground.utils import concat_images_horizontally, annotate_points, normalize_image
 
 
 def main():
