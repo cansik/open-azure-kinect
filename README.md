@@ -21,7 +21,7 @@ pip install open-azure-kinect
 ```
 
 ## Usage
-In order to load an MKV file, it is necessary to create a new instance of the `OpenK4APlayback` class.
+In order to load an MKV file, it is necessary to create a new instance of the `OpenK4APlayback` class. Note that if the `is_looping` flag is set, the stream will not stop playing at the EOF of the stream. It will automatically close and reopen the file.
 
 ```python
 from openk4a.playback import OpenK4APlayback
@@ -36,6 +36,9 @@ After that, it is possible to read the available stream information.
 ```python
 for stream in azure.streams:
     print(stream)
+
+# print clip duration
+print(azure.duration_ms)
 ```
 
 And read the actual capture information (image data).
@@ -44,6 +47,17 @@ And read the actual capture information (image data).
 while capture := azure.read():
     # read color frame as numpy array
     color_image = capture.color
+
+    # print current timestamp in ms (of the video timeline)
+    print(azure.timestamp_ms)
+```
+
+### Seek
+With `seek(timestamp_ms: int)` it is possible to jump to a specific position in the video. The current implementation is not very efficient as the library just skips frames until the timestamp is reached. In the future, this should be replaced with a ffmpeg controlled seek.
+
+```python
+# jump +1 second into the future
+azure.seek(azure.timestamp_ms + 1000)
 ```
 
 ### Calibration Data
