@@ -85,3 +85,5 @@ There is already an example script [demo.py](demo.py) which provides insights in
 
 ## About
 Copyright (c) 2024 Florian Bruggisser
+
+Thanks to [tikuma-lsuhsc](https://github.com/tikuma-lsuhsc) for creating [python-ffmpegio](https://github.com/python-ffmpegio/python-ffmpegio) and helping me extract the Azure Kinect data.
