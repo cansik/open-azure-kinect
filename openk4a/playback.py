@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Union, Optional, Dict, List, Sequence, Iterator, Any
 
+import cv2
 import ffmpegio
 import numpy as np
 from ffmpegio.streams import AviMediaReader
@@ -96,7 +97,7 @@ class OpenK4APlayback:
                 continue
 
             if stream.title == OpenK4AColorStreamName:
-                capture.color = data[0]
+                capture.color = cv2.cvtColor(data[0], cv2.COLOR_BGR2RGB)
             elif stream.title == OpenK4ADepthStreamName:
                 capture.depth = data[0].squeeze()
             elif stream.title == OpenK4AInfraredStreamName:
