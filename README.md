@@ -12,7 +12,7 @@ The following functions are currently supported:
 
 - [x] Reading colour, infrared and depth stream from mkv
 - [x] Reading and parsing calibration data from mkv
-- [ ] Image alignment and point transformation (⚠️not as accurate as the Azure Kinect SDK)
+- [ ] Image alignment and point transformation (⚠️ not as accurate as the Azure Kinect SDK)
 
 ## Installation
 
@@ -55,9 +55,9 @@ depth_calib = azure.depth_calibration
 ```
 
 ### Image and Point Transformations
-The class `CameraTransform` handles the transformation task between the different cameras. ⚠️The methods are not as accurate as the Azure Kinect SDK because some optimisations have not been taken into account yet. Please open a PR if you like to improve it.
+The class `CameraTransform` handles the transformation task between the different cameras.
 
-Be aware that this part of the framework is still very much under development!
+⚠️ Be aware that this part of the framework is still very much under development! And the methods are not as accurate as the Azure Kinect SDK because some optimisations have not been taken into account yet. Please open a PR if you like to improve it.
 
 ```python
 import numpy as np
