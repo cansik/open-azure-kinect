@@ -1,6 +1,6 @@
 # Open Azure Kinect [![PyPI](https://img.shields.io/pypi/v/open-azure-kinect)](https://pypi.org/project/open-azure-kinect/)
 
-Easy-to-use playback Python library for Azure Kinect MKV files.
+Cross-platform Python playback library for Azure Kinect MKV files.
 
 ![Calibration Example](assets/calib.jpg)
 
