@@ -21,7 +21,7 @@ setup(
     license="MIT License",
     author="Florian Bruggisser",
     author_email="github@broox.ch",
-    description="Open Azure Kinect recordings without the Azure Kinect SDK.",
+    description="Cross-platform playback library for Azure Kinect MKV files.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=required
