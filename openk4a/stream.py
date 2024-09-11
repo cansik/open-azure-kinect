@@ -7,7 +7,7 @@ OpenK4ADepthStreamName = "DEPTH"
 OpenK4AInfraredStreamName = "IR"
 
 OpenK4AStreamPixelFormatMapping = {
-    OpenK4AColorStreamName: "rgb24",
+    OpenK4AColorStreamName: "bgr24",
     OpenK4ADepthStreamName: "gray16le",
     OpenK4AInfraredStreamName: "gray16le",
 }
