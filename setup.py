@@ -15,10 +15,10 @@ long_description = (current_dir / "README.md").read_text()
 
 setup(
     name=NAME,
-    version="0.1.0a7",
+    version="0.1.0a8",
     packages=required_packages,
     url="https://github.com/cansik/open-azure-kinect",
-    license="MIT License",
+    license="GPL-2.0 License",
     author="Florian Bruggisser",
     author_email="github@broox.ch",
     description="Cross-platform playback library for Azure Kinect MKV files.",

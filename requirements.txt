@@ -1,2 +1,3 @@
 ffmpegio~=0.10.0
 numpy
+opencv-python
