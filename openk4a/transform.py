@@ -227,8 +227,8 @@ class CameraTransform:
 
     def transform_depth_to_3d(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         uv_int = np.round(uv).astype(np.int32)
-        depth_values = depth_map[np.ix_(*np.flip(uv_int).T)]
-        object_points = np.hstack((uv, depth_values))
+        depth_values = depth_map[uv_int[:, 1], uv_int[:, 0]].reshape(-1, 1)
+        object_points = np.hstack((uv, depth_values)).astype(np.float32)
         points_3d, _ = cv2.projectPoints(object_points, np.eye(1), np.zeros(3),
                                          self._depth_calibration.intrinsics.camera_matrix,
                                          self._depth_calibration.intrinsics.distortion_coefficients)
