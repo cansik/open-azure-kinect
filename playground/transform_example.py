@@ -24,7 +24,7 @@ def main():
 
         transform = CameraTransform(azure.color_calibration, azure.depth_calibration)
 
-        color = cv2.cvtColor(capture.color, cv2.COLOR_BGR2RGB)
+        color = capture.color
         infrared = cv2.cvtColor(normalize_image(capture.ir), cv2.COLOR_GRAY2BGR)
 
         color_detections = detector.detect_markers(color)
@@ -34,14 +34,22 @@ def main():
         ir_points = ir_detections.corners[:, :, 0].reshape(-1, 2)
 
         color_points_est = transform.transform_2d_depth_to_color(ir_points, capture.depth)
+        ir_points_est = transform.transform_2d_color_to_depth(color_points, capture.depth)
 
-        ir_preview = infrared.copy()
-        color_preview = color.copy()
+        ir_d2c = infrared.copy()
+        color_d2c = color.copy()
 
-        annotate_points(ir_preview, ir_points)
-        annotate_points(color_preview, color_points_est)
+        ir_c2d = infrared.copy()
+        color_c2d = color.copy()
 
-        cv2.imshow("Result D2C", concat_images_horizontally(color_preview, ir_preview, target_height=640))
+        annotate_points(ir_d2c, ir_points)
+        annotate_points(color_d2c, color_points_est)
+
+        annotate_points(ir_c2d, ir_points_est)
+        annotate_points(color_c2d, color_points)
+
+        cv2.imshow("Result D2C", concat_images_horizontally(color_d2c, ir_d2c, target_height=640))
+        cv2.imshow("Result C2D", concat_images_horizontally(color_c2d, ir_c2d, target_height=640))
         cv2.waitKey(0)
 
         cv2.destroyAllWindows()

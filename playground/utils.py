@@ -64,7 +64,7 @@ def concat_images_vertically(*images: np.ndarray, target_width: int = 1920):
     return concatenated_image
 
 
-def normalize_image(image: np.ndarray, min_value: float = 0, max_value: float = 1000) -> np.ndarray:
+def normalize_image(image: np.ndarray, min_value: float = 0, max_value: float = 2000) -> np.ndarray:
     delta = max_value - min_value
 
     img = image.astype(np.float32).clip(min_value, max_value)

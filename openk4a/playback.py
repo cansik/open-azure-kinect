@@ -5,7 +5,6 @@ import tempfile
 from pathlib import Path
 from typing import Union, Optional, Dict, List, Sequence, Iterator, Any
 
-import cv2
 import ffmpegio
 import numpy as np
 from ffmpegio.streams import AviMediaReader
@@ -203,6 +202,7 @@ class OpenK4APlayback:
             # k1, k2, p1, p2, k3, k4, k5, k6
             distortion_coefficients = np.array([params[4], params[5], params[13], params[12], *params[6:10]],
                                                dtype=np.float32)
+
             metric_radius = float(cam_info["MetricRadius"])
 
             # metric_radius equals 0 means that calibration failed to estimate this parameter
