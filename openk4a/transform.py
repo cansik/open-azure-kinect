@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Tuple
 
 import cv2
 import numpy as np
@@ -116,11 +115,9 @@ def unproject_points_to_pixels(xy, calibration: CameraCalibration):
 
 
 class CameraTransform:
-    def __init__(self, color_calibration: CameraCalibration, depth_calibration: CameraCalibration,
-                 distance_in_mm: float = 1000):
+    def __init__(self, color_calibration: CameraCalibration, depth_calibration: CameraCalibration):
         self._color_calibration = color_calibration
         self._depth_calibration = depth_calibration
-        self._distance_in_mm = distance_in_mm
 
         # pre-calculate distortion mappings
         self._color_distortion_mapping = compute_distortion_mapping(self._color_calibration)
@@ -129,30 +126,7 @@ class CameraTransform:
         self._depth_distortion_mapping = compute_distortion_mapping(self._depth_calibration)
         self._depth_inv_distortion_mapping = compute_inverse_distortion_mapping(self._depth_calibration)
 
-        # pre-calculate homography for transformation
-        self._H_color_to_depth = compute_homography_from_calib(
-            self._color_calibration,
-            self._depth_calibration,
-            float(self._distance_in_mm) / 1000)
-
-        self._H_depth_to_color = np.linalg.inv(self._H_color_to_depth)
-
-    def transform_2d_color_to_depth(self, uv: np.ndarray) -> np.ndarray:
-        return self._transform_2d_2d(uv, self._H_color_to_depth,
-                                     self._color_inv_distortion_mapping, self._depth_distortion_mapping)
-
-    def optimized_transform_2d_color_to_depth_cv2(self, uv: np.ndarray,
-                                                  depth_values_in_mm: np.ndarray,
-                                                  depth_map: np.ndarray) -> np.ndarray:
-        estimated_depth_uvs = self.transform_2d_color_to_depth_cv2(uv, depth_values_in_mm)
-
-        depth_uvs_int = np.round(estimated_depth_uvs).astype(np.int32)
-        depth_values = np.array([depth_map[y, x] for x, y in depth_uvs_int]).reshape(-1, 1)
-        accurate_depth_uvs = self.transform_2d_color_to_depth_cv2(uv, depth_values)
-
-        return accurate_depth_uvs
-
-    def transform_2d_color_to_depth_cv2(self, uv: np.ndarray, depth_values_in_mm: np.ndarray) -> np.ndarray:
+    def transform_2d_color_to_depth(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         # todo: implement epipolar line optimisation from k4a for more accurate result
         # uv on color: goal uv on depth
         # pinhole model -> depth
@@ -188,9 +162,9 @@ class CameraTransform:
 
         return distorted_transformed_points.reshape(-1, 2)
 
-    def transform_2d_depth_to_color_cv2(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
+    def transform_2d_depth_to_color(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         depth_camera_points = cv2.undistortPointsIter(
-            uv.reshape(-1, 1, 2),
+            pixels.reshape(-1, 1, 2),
             self._depth_calibration.intrinsics.camera_matrix,
             self._depth_calibration.intrinsics.distortion_coefficients,
             None,
@@ -199,7 +173,7 @@ class CameraTransform:
         )
 
         # find depth values
-        depth_uvs_int = np.round(uv).astype(np.int32)
+        depth_uvs_int = np.round(pixels).astype(np.int32)
         depth_values = np.array([depth_map[y, x] for x, y in depth_uvs_int]).reshape(-1, 1)
 
         homogeneous_points = cv2.convertPointsToHomogeneous(depth_camera_points).reshape(-1, 3)
@@ -221,10 +195,6 @@ class CameraTransform:
 
         return distorted_transformed_points.reshape(-1, 2)
 
-    def transform_2d_depth_to_color(self, uv: np.ndarray) -> np.ndarray:
-        return self._transform_2d_2d(uv, self._H_depth_to_color,
-                                     self._depth_inv_distortion_mapping, self._color_distortion_mapping)
-
     def transform_depth_to_3d(self, uv: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         uv_int = np.round(uv).astype(np.int32)
         depth_values = depth_map[uv_int[:, 1], uv_int[:, 0]].reshape(-1, 1)
@@ -235,33 +205,5 @@ class CameraTransform:
         return points_3d
 
     def transform_color_to_3d(self, uv: np.ndarray) -> np.ndarray:
+        raise NotImplemented()
         return self.transform_depth_to_3d(self.transform_2d_color_to_depth(uv))
-
-    def align_image_color_to_depth(self, image: np.ndarray) -> np.ndarray:
-        return self._align_image(image, self._H_color_to_depth,
-                                 self._color_distortion_mapping,
-                                 self._depth_inv_distortion_mapping,
-                                 (self._depth_calibration.width, self._depth_calibration.height))
-
-    def align_image_depth_to_color(self, image: np.ndarray) -> np.ndarray:
-        return self._align_image(image, self._H_depth_to_color,
-                                 self._depth_distortion_mapping,
-                                 self._color_inv_distortion_mapping,
-                                 (self._color_calibration.width, self._color_calibration.height))
-
-    @staticmethod
-    def _align_image(image: np.ndarray, homography: np.ndarray,
-                     src_distortion: DistortionMapping,
-                     dest_inv_distortion: DistortionMapping,
-                     target_size: Tuple[int, int],
-                     interpolation_method: int = cv2.INTER_NEAREST) -> np.ndarray:
-        src_rectified = src_distortion.remap(image, interpolation_method)
-        warped_rectified = cv2.warpPerspective(src_rectified, homography, target_size)
-        return dest_inv_distortion.remap(warped_rectified, interpolation_method)
-
-    @staticmethod
-    def _transform_2d_2d(uv: np.ndarray, homography: np.ndarray,
-                         src_inverse_distortion: DistortionMapping, dest_distortion: DistortionMapping) -> np.ndarray:
-        uv_rectified = src_inverse_distortion.transform(uv)
-        dest_uv_rectified = cv2.perspectiveTransform(uv_rectified.reshape(-1, 1, 2), homography).reshape(-1, 2)
-        return dest_distortion.transform(dest_uv_rectified)
