@@ -20,8 +20,6 @@ def main():
     detector = CharucoDetectionHelper()
 
     while capture := azure.read():
-        center_depth = int(capture.depth[576 // 2, 640 // 2])
-
         transform = CameraTransform(azure.color_calibration, azure.depth_calibration)
 
         color = capture.color
