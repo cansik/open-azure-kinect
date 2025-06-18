@@ -210,11 +210,9 @@ class OpenK4APlayback:
                 metric_radius = 1.7
 
             # extract extrinsic parameters
+            # translation is in meter
             rotation = np.array(cam_info["Rt"]["Rotation"], dtype=np.float32).reshape(3, 3)
             translation = np.array(cam_info["Rt"]["Translation"], dtype=np.float32).reshape(1, 3)
-
-            # millimeter to meter conversion
-            translation = translation / 1000
 
             raw_calibration = CameraCalibration(
                 Intrinsics(camera_matrix, distortion_coefficients),

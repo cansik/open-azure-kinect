@@ -239,13 +239,13 @@ class CameraTransform:
 
         homogeneous_points = cv2.convertPointsToHomogeneous(depth_camera_points).reshape(-1, 3)
 
-        # set depth value to actual depth (multiply all components with depth / 1000)
+        # set depth value to actual depth (multiply all components with depth (in m))
         homogeneous_points *= depth_values / 1000
 
         # get rotation and translation
         rotation_matrix = self._color_calibration.extrinsics.rotation.astype(np.float64)
         rotation_vector, _ = cv2.Rodrigues(rotation_matrix)
-        translation_vector = (self._color_calibration.extrinsics.translation * 1000)
+        translation_vector = self._color_calibration.extrinsics.translation
 
         distorted_transformed_points, _ = cv2.projectPoints(
             homogeneous_points.reshape(-1, 1, 3),
