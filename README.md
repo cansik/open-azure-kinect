@@ -12,7 +12,7 @@ The following functions are currently supported:
 
 - [x] Reading colour, infrared and depth stream from mkv
 - [x] Reading and parsing calibration data from mkv
-- [ ] Image alignment and point transformation (⚠️ not as accurate as the Azure Kinect SDK)
+- [x] Image alignment and point transformation (⚠️ maybe not as accurate as the Azure Kinect SDK)
 
 ## Installation
 
@@ -71,17 +71,20 @@ depth_calib = azure.depth_calibration
 ### Image and Point Transformations
 The class `CameraTransform` handles the transformation task between the different cameras.
 
-⚠️ Be aware that this part of the framework is still very much under development! And the methods are not as accurate as the Azure Kinect SDK because some optimisations have not been taken into account yet. Please open a PR if you like to improve it.
+⚠️ Be aware that this part of the framework is still under development! Please open a PR if you like to improve it.
 
 ```python
 import numpy as np
+
 from openk4a.transform import CameraTransform
 
-estimated_depth_mm = 1500  # adjust this value to improve the calculation accuracy
-transform = CameraTransform(azure.color_calibration, azure.depth_calibration, estimated_depth_mm)
+transform = CameraTransform(azure.color_calibration, azure.depth_calibration)
 
-# transform points from color to depth image
+# transform points from color to depth image (using epipolar search)
 depth_points = transform.transform_2d_color_to_depth(np.array([[300, 400], [200, 200]]))
+
+# create 3d pointcloud from depthmap
+points_3d = transform.create_pointcloud(depth_map)
 
 # transform color image into depth image
 transformed_color = transform.align_image_depth_to_color(color_image)
@@ -95,7 +98,7 @@ pip install -r dev-requirements.txt
 pip install -r requirements.txt
 ```
 
-There is already an example script [demo.py](demo.py) which provides insights in how to use the library.
+There is already an example script [demo.py](demo.py) which provides insights on how to use the library.
 
 ## About
 Thanks to [tikuma-lsuhsc](https://github.com/tikuma-lsuhsc) for creating [python-ffmpegio](https://github.com/python-ffmpegio/python-ffmpegio) and helping me extract the Azure Kinect data.
