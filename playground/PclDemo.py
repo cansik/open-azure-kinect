@@ -20,7 +20,7 @@ def process_video(input_file, frame_rate):
     azure.open()
 
     depth_calibration = azure.depth_calibration
-    camera_transform = CameraTransform(azure.color_calibration, depth_calibration, 1500)
+    camera_transform = CameraTransform(azure.color_calibration, depth_calibration)
     distortion_mapping = compute_distortion_mapping(depth_calibration)
 
     width = 640
