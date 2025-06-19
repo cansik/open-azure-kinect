@@ -34,6 +34,11 @@ class DistortionMapping:
 
 
 def compute_distortion_mapping(calibration: CameraCalibration) -> DistortionMapping:
+    """
+    Calculates the mapping from undistorted image space to distorted image space.
+    :param calibration:
+    :return:
+    """
     x_map, y_map = cv2.initUndistortRectifyMap(
         calibration.intrinsics.camera_matrix,
         calibration.intrinsics.distortion_coefficients,
@@ -47,6 +52,11 @@ def compute_distortion_mapping(calibration: CameraCalibration) -> DistortionMapp
 
 
 def compute_inverse_distortion_mapping(calibration: CameraCalibration) -> DistortionMapping:
+    """
+    Calculates the mapping from distorted image space to undistorted image space.
+    :param calibration:
+    :return:
+    """
     x_map, y_map = cv2.initInverseRectificationMap(
         calibration.intrinsics.camera_matrix,
         calibration.intrinsics.distortion_coefficients,
@@ -57,6 +67,43 @@ def compute_inverse_distortion_mapping(calibration: CameraCalibration) -> Distor
     )
 
     return DistortionMapping(x_map, y_map)
+
+
+def compute_inverse_distortion_mapping_exact(calibration: CameraCalibration) -> DistortionMapping:
+    """
+    Calculates the mapping from distorted image space to undistorted image space
+    by directly solving the distortion equations at every pixel via undistortPointsIter.
+    This yields sub‐pixel‐exact maps at the cost of one heavy init pass.
+    """
+    K = calibration.intrinsics.camera_matrix
+    dist = calibration.intrinsics.distortion_coefficients
+    fx, fy = calibration.intrinsics.fx, calibration.intrinsics.fy
+    cx, cy = calibration.intrinsics.cx, calibration.intrinsics.cy
+    W, H = calibration.width, calibration.height
+
+    # build a full grid of distorted pixel coords [0..W)×[0..H)
+    us = np.arange(W, dtype=np.float32)
+    vs = np.arange(H, dtype=np.float32)
+    grid_uv = np.stack(np.meshgrid(us, vs), axis=-1)  # shape (H, W, 2)
+    pts = grid_uv.reshape(-1, 1, 2)  # shape (H*W,1,2)
+
+    # undistortPointsIter to normalized coords
+    norm_pts = cv2.undistortPointsIter(
+        pts, K, dist,
+        None, None,
+        (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 20, 1e-22)
+    )  # shape (H*W,1,2)
+
+    # reproject to pixel space
+    norm_pts = norm_pts.reshape(-1, 2)
+    map_x_flat = norm_pts[:, 0] * fx + cx
+    map_y_flat = norm_pts[:, 1] * fy + cy
+
+    # reshape back into H×W float32 maps
+    map_x = map_x_flat.reshape(H, W).astype(np.float32)
+    map_y = map_y_flat.reshape(H, W).astype(np.float32)
+
+    return DistortionMapping(map_x, map_y)
 
 
 class CameraTransform:
