@@ -2,9 +2,9 @@ import argparse
 
 import cv2
 
+from examples.utils import normalize_image, concat_images_horizontally
 from openk4a.playback import OpenK4APlayback
 from openk4a.transform import CameraTransform
-from examples.utils import normalize_image, concat_images_horizontally
 
 
 def main():
