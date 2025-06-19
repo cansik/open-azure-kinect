@@ -1,13 +1,75 @@
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
 from openk4a.calibration import CameraCalibration
 
 
+@dataclass
+class DistortionMapping:
+    x_mapping: np.ndarray  # shape (H, W)
+    y_mapping: np.ndarray  # shape (H, W)
+
+    def transform(self, points: np.ndarray) -> np.ndarray:
+        """
+        Vectorized lookup of the undistorted coordinates for a list of pixels.
+
+        points: (N,2) float or int array of (u, v) pixel indices
+        returns: (N,2) float array of (undist_x, undist_y)
+        """
+        uv = points.astype(np.int32)
+        u = uv[:, 0]
+        v = uv[:, 1]
+
+        undist_x = self.x_mapping[v, u]
+        undist_y = self.y_mapping[v, u]
+        return np.stack([undist_x, undist_y], axis=1)
+
+    def remap(self, image: np.ndarray, interpolation=cv2.INTER_NEAREST) -> np.ndarray:
+        """
+        Apply the precomputed undistort maps to the whole image in one call.
+        """
+        return cv2.remap(image, self.x_mapping, self.y_mapping, interpolation)
+
+
+def compute_distortion_mapping(calibration: CameraCalibration) -> DistortionMapping:
+    x_map, y_map = cv2.initUndistortRectifyMap(
+        calibration.intrinsics.camera_matrix,
+        calibration.intrinsics.distortion_coefficients,
+        np.eye(3),
+        calibration.intrinsics.camera_matrix,
+        (calibration.width, calibration.height),
+        5,  # CV_32FC1
+    )
+
+    return DistortionMapping(x_map, y_map)
+
+
+def compute_inverse_distortion_mapping(calibration: CameraCalibration) -> DistortionMapping:
+    x_map, y_map = cv2.initInverseRectificationMap(
+        calibration.intrinsics.camera_matrix,
+        calibration.intrinsics.distortion_coefficients,
+        np.eye(3),
+        calibration.intrinsics.camera_matrix,
+        (calibration.width, calibration.height),
+        5,  # CV_32FC1
+    )
+
+    return DistortionMapping(x_map, y_map)
+
+
 class CameraTransform:
     def __init__(self, color_calibration: CameraCalibration, depth_calibration: CameraCalibration):
         self._color_calibration = color_calibration
         self._depth_calibration = depth_calibration
+
+        # pre-calculate distortion mappings
+        self._color_distortion_mapping = compute_distortion_mapping(self._color_calibration)
+        self._color_inv_distortion_mapping = compute_inverse_distortion_mapping(self._color_calibration)
+
+        self._depth_distortion_mapping = compute_distortion_mapping(self._depth_calibration)
+        self._depth_inv_distortion_mapping = compute_inverse_distortion_mapping(self._depth_calibration)
 
     def transform_2d_depth_to_color(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         # Undistort and normalize depth image pixels

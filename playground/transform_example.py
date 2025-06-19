@@ -5,7 +5,7 @@ import cv2
 from openk4a.playback import OpenK4APlayback
 from openk4a.transform import CameraTransform
 from playground.CharucoDetectionHelper import CharucoDetectionHelper
-from playground.utils import concat_images_horizontally, annotate_points, normalize_image
+from playground.utils import annotate_points, normalize_image, concat_images_horizontally, compute_projection_error
 
 
 def main():
@@ -14,14 +14,14 @@ def main():
     args = parser.parse_args()
 
     azure = OpenK4APlayback(args.input)
-    azure.is_looping = True
+    azure.is_looping = False
     azure.open()
 
     detector = CharucoDetectionHelper()
 
-    while capture := azure.read():
-        transform = CameraTransform(azure.color_calibration, azure.depth_calibration)
+    transform = CameraTransform(azure.color_calibration, azure.depth_calibration)
 
+    while capture := azure.read():
         color = capture.color
         infrared = cv2.cvtColor(normalize_image(capture.ir), cv2.COLOR_GRAY2BGR)
 
@@ -33,6 +33,12 @@ def main():
 
         color_points_est = transform.transform_2d_depth_to_color(ir_points, capture.depth)
         ir_points_est = transform.transform_2d_color_to_depth(color_points, capture.depth)
+
+        d2c_count, d2c_error = compute_projection_error(ir_detections, color_detections, color_points_est)
+        c2d_count, c2d_error = compute_projection_error(color_detections, ir_detections, ir_points_est)
+
+        print(f"Depth to Color Error: {d2c_error:.4f} (using {d2c_count} points)")
+        print(f"Color to Depth Error: {c2d_error:.4f} (using {c2d_count} points)")
 
         ir_d2c = infrared.copy()
         color_d2c = color.copy()

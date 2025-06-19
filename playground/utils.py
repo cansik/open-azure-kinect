@@ -1,5 +1,9 @@
+from typing import Tuple
+
 import cv2
 import numpy as np
+
+from playground.CharucoDetectionHelper import MarkerDetectionResult
 
 COLOR_SEQUENCE = [
     (230, 25, 75),
@@ -70,3 +74,43 @@ def normalize_image(image: np.ndarray, min_value: float = 0, max_value: float = 
     img = image.astype(np.float32).clip(min_value, max_value)
     img = (((img - min_value) / delta) * 255).astype(np.uint8)
     return img
+
+
+def compute_projection_error(
+        source_markers: MarkerDetectionResult,
+        destination_markers: MarkerDetectionResult,
+        estimated_destination_points: np.ndarray
+) -> Tuple[int, float]:
+    """
+    Given a set of source-detected markers and their IDs, the corresponding
+    estimated points in the destination image, and the actual destination
+    detections, compute the mean reprojection error.
+
+    Args:
+        source_markers: MarkerDetectionResult for the source image
+        destination_markers: MarkerDetectionResult for the destination image
+        estimated_destination_points: (N,2) ndarray of projected source points
+            into the destination image; N == number of source_markers.ids
+
+    Returns:
+        count: number of markers used in the error computation
+        mean_error: mean Euclidean pixel error over the matched markers
+    """
+    # Build dict of actual destination centers: id -> (x,y)
+    dest_centers = {}
+    if destination_markers.ids is not None:
+        for corners, mid in zip(destination_markers.corners, destination_markers.ids.flatten()):
+            pts = corners.reshape(-1, 2)  # flatten (4,1,2) -> (4,2)
+            dest_centers[int(mid)] = pts.mean(axis=0)
+
+    errors = []
+    if source_markers.ids is not None:
+        for idx, mid in enumerate(source_markers.ids.flatten()):
+            if mid in dest_centers:
+                est_pt = estimated_destination_points[idx]
+                true_pt = dest_centers[int(mid)]
+                errors.append(np.linalg.norm(est_pt - true_pt))
+
+    count = len(errors)
+    mean_error = float(np.mean(errors)) if count > 0 else float('nan')
+    return count, mean_error
