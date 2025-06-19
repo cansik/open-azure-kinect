@@ -120,34 +120,18 @@ class CameraTransform:
         self._depth_inv_distortion_mapping = compute_inverse_distortion_mapping_exact(self._depth_calibration)
 
     def transform_2d_depth_to_color(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
-        # Undistort pixels using the precomputed inverse‐distortion map
-        undistorted_pixels: np.ndarray = self._depth_inv_distortion_mapping.transform(
-            pixels.astype(np.int32, copy=False)
+        norm = self._pixels_to_normalized_plane(
+            pixels, self._depth_calibration, self._depth_inv_distortion_mapping
         )
-
-        # Convert to normalized coordinates on the depth camera’s focal plane
-        fx = self._depth_calibration.intrinsics.fx
-        fy = self._depth_calibration.intrinsics.fy
-        cx = self._depth_calibration.intrinsics.cx
-        cy = self._depth_calibration.intrinsics.cy
-
-        x_norm = (undistorted_pixels[:, 0] - cx) / fx
-        y_norm = (undistorted_pixels[:, 1] - cy) / fy
-
-        # Lookup depth values (in meters) and back‐project into depth camera frame
-        H, W = depth_map.shape
-        uv = pixels.astype(np.int32, copy=False)
-        depth_flat = depth_map.ravel()
-        idx = uv[:, 1] * W + uv[:, 0]
-        z = depth_flat[idx].astype(np.float32) * 0.001
-        pts_depth_cam = np.stack([x_norm * z, y_norm * z, z], axis=1)
+        Z = self._pixels_to_depth(pixels, depth_map) / 1000
+        pts_depth = np.stack([norm[:, 0] * Z, norm[:, 1] * Z, Z], axis=1)
 
         # Transform points from depth frame into color frame
         rot_vec, trans_vec = self._get_relative_extrinsics(
             self._depth_calibration, self._color_calibration
         )
         projected, _ = cv2.projectPoints(
-            pts_depth_cam.reshape(-1, 1, 3),
+            pts_depth.reshape(-1, 1, 3),
             rot_vec, trans_vec,
             self._color_calibration.intrinsics.camera_matrix,
             self._color_calibration.intrinsics.distortion_coefficients
@@ -253,11 +237,8 @@ class CameraTransform:
             pixels, self._depth_calibration, self._depth_inv_distortion_mapping
         )
 
-        # lookup depth with interpolation in mm
-        Z = self._pixels_to_depth(pixels, depth_map)
-
-        # convert to m
-        Z /= 1000
+        # lookup depth with interpolation in m
+        Z = self._pixels_to_depth(pixels, depth_map) / 1000
 
         # back-project: X_mm = x_norm * Z_mm, etc.
         pts = np.empty((pixels.shape[0], 3), dtype=np.float32)
