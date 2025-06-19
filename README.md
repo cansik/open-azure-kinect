@@ -87,7 +87,7 @@ depth_points = transform.transform_2d_color_to_depth(np.array([[300, 400], [200,
 points_3d = transform.create_pointcloud(depth_map)
 
 # transform color image into depth image
-transformed_color = transform.align_image_depth_to_color(color_image)
+transformed_color = transform.align_image_color_to_depth(color, depth_map)
 ```
 
 ## Development and Examples
