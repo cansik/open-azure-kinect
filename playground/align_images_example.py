@@ -32,7 +32,7 @@ def main():
         color_blended_on_ir = cv2.addWeighted(ir_3ch, 0.5, color_to_ir, 0.5, 0)
 
         # Combine horizontally for side-by-side comparison
-        result = concat_images_horizontally(ir_blended_on_color, color_blended_on_ir, target_height=640)
+        result = concat_images_horizontally(ir_blended_on_color, color_blended_on_ir, target_height=720)
 
         cv2.imshow("IR -> Color | Color -> IR", result)
 
