@@ -21,7 +21,7 @@ setup(
     license="GPL-2.0 License",
     author="Florian Bruggisser",
     author_email="github@broox.ch",
-    description="Cross-platform playback library for Azure Kinect MKV files.",
+    description="Cross-platform playback library for Microsoft Azure Kinect MKV files.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=required
