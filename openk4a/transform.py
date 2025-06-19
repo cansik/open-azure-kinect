@@ -112,35 +112,40 @@ class CameraTransform:
         self._depth_calibration = depth_calibration
 
         # pre-calculate distortion mappings
+        # for the inverse distortion mapping we use the exact (optimised) method
         self._color_distortion_mapping = compute_distortion_mapping(self._color_calibration)
-        self._color_inv_distortion_mapping = compute_inverse_distortion_mapping(self._color_calibration)
+        self._color_inv_distortion_mapping = compute_inverse_distortion_mapping_exact(self._color_calibration)
 
         self._depth_distortion_mapping = compute_distortion_mapping(self._depth_calibration)
-        self._depth_inv_distortion_mapping = compute_inverse_distortion_mapping(self._depth_calibration)
+        self._depth_inv_distortion_mapping = compute_inverse_distortion_mapping_exact(self._depth_calibration)
 
     def transform_2d_depth_to_color(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
-        # Undistort and normalize depth image pixels
-        depth_norm = cv2.undistortPointsIter(
-            pixels.reshape(-1, 1, 2),
-            self._depth_calibration.intrinsics.camera_matrix,
-            self._depth_calibration.intrinsics.distortion_coefficients,
-            None, None,
-            (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 20, 1e-22)
-        ).reshape(-1, 2)
+        # Undistort pixels using the precomputed inverse‐distortion map
+        undistorted_pixels: np.ndarray = self._depth_inv_distortion_mapping.transform(
+            pixels.astype(np.int32, copy=False)
+        )
 
-        # Remap to get depth values and back-project to 3D
-        map_x = pixels[:, 0].reshape(-1, 1).astype(np.float32)
-        map_y = pixels[:, 1].reshape(-1, 1).astype(np.float32)
-        depth_values = cv2.remap(depth_map, map_x, map_y, interpolation=cv2.INTER_LINEAR).reshape(-1, 1)
-        pts_depth_cam = np.hstack([depth_norm, np.ones((depth_norm.shape[0], 1))])
-        pts_depth_cam *= (depth_values / 1000)
+        # Convert to normalized coordinates on the depth camera’s focal plane
+        fx = self._depth_calibration.intrinsics.fx
+        fy = self._depth_calibration.intrinsics.fy
+        cx = self._depth_calibration.intrinsics.cx
+        cy = self._depth_calibration.intrinsics.cy
 
-        # Compute relative transform from depth to color
+        x_norm = (undistorted_pixels[:, 0] - cx) / fx
+        y_norm = (undistorted_pixels[:, 1] - cy) / fy
+
+        # Lookup depth values (in meters) and back‐project into depth camera frame
+        H, W = depth_map.shape
+        uv = pixels.astype(np.int32, copy=False)
+        depth_flat = depth_map.ravel()
+        idx = uv[:, 1] * W + uv[:, 0]
+        z = depth_flat[idx].astype(np.float32) * 0.001
+        pts_depth_cam = np.stack([x_norm * z, y_norm * z, z], axis=1)
+
+        # Transform points from depth frame into color frame
         rot_vec, trans_vec = self._get_relative_extrinsics(
             self._depth_calibration, self._color_calibration
         )
-
-        # Project into color image
         projected, _ = cv2.projectPoints(
             pts_depth_cam.reshape(-1, 1, 3),
             rot_vec, trans_vec,
@@ -238,35 +243,29 @@ class CameraTransform:
         rot_vec, _ = cv2.Rodrigues(R_rel)
         return rot_vec, t_rel.flatten()
 
-    def transform_depth_to_3d(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
-        normalized: np.ndarray = self._depth_inv_distortion_mapping.transform(
-            pixels.astype(np.int32, copy=False)
-        )  # shape (N,2), undistorted pixel coords
+    def transform_depth_to_3d(
+            self,
+            pixels: np.ndarray,
+            depth_map: np.ndarray
+    ) -> np.ndarray:
+        # undistort+normalize as before …
+        norm = self._pixels_to_normalized_plane(
+            pixels, self._depth_calibration, self._depth_inv_distortion_mapping
+        )
 
-        # Convert normalized pixels back to normalized image plane:
-        fx = self._depth_calibration.intrinsics.fx
-        fy = self._depth_calibration.intrinsics.fy
-        cx = self._depth_calibration.intrinsics.cx
-        cy = self._depth_calibration.intrinsics.cy
+        # lookup depth with interpolation in mm
+        Z = self._pixels_to_depth(pixels, depth_map)
 
-        # (x_norm, y_norm) = ((u-cx)/fx, (v-cy)/fy)
-        x_norm = (normalized[:, 0] - cx) / fx
-        y_norm = (normalized[:, 1] - cy) / fy
+        # convert to m
+        Z /= 1000
 
-        # Grab depth in meters via flat indexing
-        H, W = depth_map.shape
-        uv = pixels.astype(np.int32, copy=False)
-        depth_flat = depth_map.ravel()
-        idx = uv[:, 1] * W + uv[:, 0]
-        Z = depth_flat[idx].astype(np.float32) * 0.001  # (N,)
+        # back-project: X_mm = x_norm * Z_mm, etc.
+        pts = np.empty((pixels.shape[0], 3), dtype=np.float32)
+        pts[:, 0] = norm[:, 0] * Z
+        pts[:, 1] = norm[:, 1] * Z
+        pts[:, 2] = Z
 
-        # Back-project into 3D
-        out = np.empty((pixels.shape[0], 3), dtype=np.float32)
-        out[:, 0] = x_norm * Z
-        out[:, 1] = y_norm * Z
-        out[:, 2] = Z
-
-        return out
+        return pts
 
     def transform_color_to_3d(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         return self.transform_depth_to_3d(self.transform_2d_color_to_depth(pixels, depth_map), depth_map)
@@ -280,3 +279,34 @@ class CameraTransform:
         sampled_pixels = np.stack([uu, vv], axis=-1).reshape(-1, 2)
 
         return self.transform_depth_to_3d(sampled_pixels, depth_map)
+
+    @staticmethod
+    def _pixels_to_normalized_plane(pixels: np.ndarray,
+                                    calibration: CameraCalibration,
+                                    inv_map: DistortionMapping) -> np.ndarray:
+        """
+        Undistort pixel coordinates and convert to normalized image-plane coords (x_norm, y_norm).
+        """
+        # Undistort using precomputed inverse map
+        undistorted = inv_map.transform(pixels.astype(np.int32, copy=False))
+        # Fetch intrinsics
+        fx = calibration.intrinsics.fx
+        fy = calibration.intrinsics.fy
+        cx = calibration.intrinsics.cx
+        cy = calibration.intrinsics.cy
+        # Convert to normalized coordinates
+        x_norm = (undistorted[:, 0] - cx) / fx
+        y_norm = (undistorted[:, 1] - cy) / fy
+        return np.stack([x_norm, y_norm], axis=1)
+
+    @staticmethod
+    def _pixels_to_depth(pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
+        """
+        Lookup the nearest depth (in millimeters) for each pixel coordinate
+        by rounding to the nearest integer pixel.
+        """
+        H, W = depth_map.shape
+        uv = np.rint(pixels).astype(np.int32)
+        u = np.clip(uv[:, 0], 0, W - 1)
+        v = np.clip(uv[:, 1], 0, H - 1)
+        return depth_map[v, u].astype(np.float32)
