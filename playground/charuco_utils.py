@@ -95,7 +95,7 @@ class CharucoDetectionHelper:
             return image
 
 
-if __name__ == "__main__":
+def main():
     image = cv2.imread("assets/marker.jpeg")
 
     detector = CharucoDetectionHelper(8, 5, 20, 15, cv2.aruco.DICT_4X4_250)
@@ -104,3 +104,7 @@ if __name__ == "__main__":
     cv2.imwrite("assets/marker-ann.jpeg", image)
 
     cv2.imwrite("assets/board.png", detector.generate_board((4960, 3508)))
+
+
+if __name__ == "__main__":
+    main()
