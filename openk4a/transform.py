@@ -142,13 +142,9 @@ class CameraTransform:
                                     z_near: float = 0.2, z_far: float = 5.0,
                                     steps: int = 50) -> np.ndarray:
         # Undistort and normalize color image pixels
-        color_norm = cv2.undistortPointsIter(
-            pixels.reshape(-1, 1, 2),
-            self._color_calibration.intrinsics.camera_matrix,
-            self._color_calibration.intrinsics.distortion_coefficients,
-            None, None,
-            (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 20, 1e-22)
-        ).reshape(-1, 2)
+        color_norm = self._pixels_to_normalized_plane(
+            pixels, self._color_calibration, self._color_inv_distortion_mapping
+        )
 
         # Perform epipolar depth search
         depths = self._epipolar_search(color_norm, depth_map, z_near, z_far, steps)
@@ -205,34 +201,11 @@ class CameraTransform:
 
         return depths
 
-    @staticmethod
-    def _get_relative_extrinsics(src_cal, dst_cal):
-        """
-        Compute rotation and translation to go from src camera frame to dst camera frame.
-        Returns:
-            rot_vec: Rodrigues rotation vector
-            trans_vec: translation vector (3,)
-        """
-        # World transformations: X_world = R_src * X_src + t_src
-        R_src = src_cal.extrinsics.rotation.astype(np.float64)
-        t_src = src_cal.extrinsics.translation.astype(np.float64).reshape(3, 1)
-        R_dst = dst_cal.extrinsics.rotation.astype(np.float64)
-        t_dst = dst_cal.extrinsics.translation.astype(np.float64).reshape(3, 1)
-
-        # Relative rotation: R_rel = R_dst * R_src.T
-        R_rel = R_dst.dot(R_src.T)
-        # Relative translation: t_rel = t_dst - R_rel * t_src
-        t_rel = t_dst - R_rel.dot(t_src)
-
-        rot_vec, _ = cv2.Rodrigues(R_rel)
-        return rot_vec, t_rel.flatten()
-
     def transform_depth_to_3d(
             self,
             pixels: np.ndarray,
             depth_map: np.ndarray
     ) -> np.ndarray:
-        # undistort+normalize as before …
         norm = self._pixels_to_normalized_plane(
             pixels, self._depth_calibration, self._depth_inv_distortion_mapping
         )
@@ -291,3 +264,25 @@ class CameraTransform:
         u = np.clip(uv[:, 0], 0, W - 1)
         v = np.clip(uv[:, 1], 0, H - 1)
         return depth_map[v, u].astype(np.float32)
+
+    @staticmethod
+    def _get_relative_extrinsics(src_cal, dst_cal):
+        """
+        Compute rotation and translation to go from src camera frame to dst camera frame.
+        Returns:
+            rot_vec: Rodrigues rotation vector
+            trans_vec: translation vector (3,)
+        """
+        # World transformations: X_world = R_src * X_src + t_src
+        R_src = src_cal.extrinsics.rotation.astype(np.float64)
+        t_src = src_cal.extrinsics.translation.astype(np.float64).reshape(3, 1)
+        R_dst = dst_cal.extrinsics.rotation.astype(np.float64)
+        t_dst = dst_cal.extrinsics.translation.astype(np.float64).reshape(3, 1)
+
+        # Relative rotation: R_rel = R_dst * R_src.T
+        R_rel = R_dst.dot(R_src.T)
+        # Relative translation: t_rel = t_dst - R_rel * t_src
+        t_rel = t_dst - R_rel.dot(t_src)
+
+        rot_vec, _ = cv2.Rodrigues(R_rel)
+        return rot_vec, t_rel.flatten()
