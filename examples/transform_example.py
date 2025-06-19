@@ -4,8 +4,8 @@ import cv2
 
 from openk4a.playback import OpenK4APlayback
 from openk4a.transform import CameraTransform
-from playground.charuco_utils import CharucoDetectionHelper
-from playground.utils import annotate_points, normalize_image, concat_images_horizontally, compute_projection_error
+from examples.charuco_utils import CharucoDetectionHelper
+from examples.utils import annotate_points, normalize_image, concat_images_horizontally, compute_projection_error
 
 
 def main():

@@ -4,7 +4,7 @@ import cv2
 
 from openk4a.playback import OpenK4APlayback
 from openk4a.transform import CameraTransform
-from playground.utils import normalize_image, concat_images_horizontally
+from examples.utils import normalize_image, concat_images_horizontally
 
 
 def main():

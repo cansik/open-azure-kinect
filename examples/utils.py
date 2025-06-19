@@ -3,7 +3,7 @@ from typing import Tuple
 import cv2
 import numpy as np
 
-from playground.charuco_utils import MarkerDetectionResult
+from examples.charuco_utils import MarkerDetectionResult
 
 COLOR_SEQUENCE = [
     (230, 25, 75),
