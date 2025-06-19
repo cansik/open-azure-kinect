@@ -90,6 +90,9 @@ points_3d = transform.create_pointcloud(depth_map)
 transformed_color = transform.align_image_color_to_depth(color, depth_map)
 ```
 
+## Examples
+Please find more templates on how to use this library in the [examples](https://github.com/cansik/open-azure-kinect/tree/main/examples) folder.
+
 ## Development and Examples
 To run the examples or develop the library please install the `dev-requirements.txt` and `requirements.txt`.
 
