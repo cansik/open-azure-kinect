@@ -2,6 +2,9 @@
 setuptools
 wheel
 
+# tests
+pytest
+
 # examples
 opencv-python
 pygfx
