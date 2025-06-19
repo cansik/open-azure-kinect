@@ -239,26 +239,32 @@ class CameraTransform:
         return rot_vec, t_rel.flatten()
 
     def transform_depth_to_3d(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
-        # Undistort to normalized image plane
-        pixels_f = pixels.astype(np.float32)
-        normalized = cv2.undistortPointsIter(
-            pixels_f.reshape(-1, 1, 2),
-            self._depth_calibration.intrinsics.camera_matrix,
-            self._depth_calibration.intrinsics.distortion_coefficients,
-            None, None,
-            (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 20, 1e-22)
-        ).reshape(-1, 2)  # shape (N,2)
+        normalized: np.ndarray = self._depth_inv_distortion_mapping.transform(
+            pixels.astype(np.int32, copy=False)
+        )  # shape (N,2), undistorted pixel coords
 
+        # Convert normalized pixels back to normalized image plane:
+        fx = self._depth_calibration.intrinsics.fx
+        fy = self._depth_calibration.intrinsics.fy
+        cx = self._depth_calibration.intrinsics.cx
+        cy = self._depth_calibration.intrinsics.cy
+
+        # (x_norm, y_norm) = ((u-cx)/fx, (v-cy)/fy)
+        x_norm = (normalized[:, 0] - cx) / fx
+        y_norm = (normalized[:, 1] - cy) / fy
+
+        # Grab depth in meters via flat indexing
         H, W = depth_map.shape
         uv = pixels.astype(np.int32, copy=False)
         depth_flat = depth_map.ravel()
         idx = uv[:, 1] * W + uv[:, 0]
-        Z = depth_flat[idx].astype(np.float32) * 0.001
+        Z = depth_flat[idx].astype(np.float32) * 0.001  # (N,)
 
+        # Back-project into 3D
         out = np.empty((pixels.shape[0], 3), dtype=np.float32)
+        out[:, 0] = x_norm * Z
+        out[:, 1] = y_norm * Z
         out[:, 2] = Z
-        out[:, 0] = normalized[:, 0] * Z
-        out[:, 1] = normalized[:, 1] * Z
 
         return out
 
