@@ -171,35 +171,37 @@ class CameraTransform:
                          z_near: float, z_far: float, steps: int) -> np.ndarray:
         H, W = depth_map.shape
         N = color_norm.shape[0]
-        depths = np.zeros(N, dtype=np.float32)
         sample_z = np.linspace(z_near, z_far, steps, dtype=np.float32)
 
-        # Precompute relative transform
+        # build the full set of 3D points in color frame
+        # pts_color: (N*steps, 1, 3) for projectPoints
+        xx = (color_norm[:, 0][:, None] * sample_z[None, :]).reshape(-1)
+        yy = (color_norm[:, 1][:, None] * sample_z[None, :]).reshape(-1)
+        zz = np.tile(sample_z, N)
+        pts_color = np.stack([xx, yy, zz], axis=1).astype(np.float32).reshape(-1, 1, 3)
+
+        # transform into depth frame
         rot_vec, trans_vec = self._get_relative_extrinsics(
             self._color_calibration, self._depth_calibration
         )
 
-        for i in range(N):
-            ray = np.tile(color_norm[i], (steps, 1))
-            pts = np.hstack([ray, np.ones((steps, 1), dtype=np.float32)])
-            pts *= sample_z.reshape(-1, 1)
+        # project with distortion
+        Kd = self._depth_calibration.intrinsics.camera_matrix
+        distd = self._depth_calibration.intrinsics.distortion_coefficients
+        proj, _ = cv2.projectPoints(
+            pts_color, rot_vec, trans_vec, Kd, distd
+        )
+        proj = proj.reshape(N, steps, 2)  # (N,steps,2)
 
-            proj_pts, _ = cv2.projectPoints(
-                pts.reshape(-1, 1, 3), rot_vec, trans_vec,
-                self._depth_calibration.intrinsics.camera_matrix,
-                self._depth_calibration.intrinsics.distortion_coefficients
-            )
-            proj = proj_pts.reshape(-1, 2)
+        # fetch depth_map along those distorted epipolar curves
+        u_idx = np.clip(np.round(proj[..., 0]).astype(int), 0, W - 1)
+        v_idx = np.clip(np.round(proj[..., 1]).astype(int), 0, H - 1)
+        depth_vals = depth_map[v_idx, u_idx] / 1000.0  # (N,steps)
 
-            u = np.clip(np.round(proj[:, 0]).astype(int), 0, W - 1)
-            v = np.clip(np.round(proj[:, 1]).astype(int), 0, H - 1)
-            depth_vals = depth_map[v, u] / 1000.0
-
-            diff = np.abs(depth_vals - sample_z)
-            best_idx = np.argmin(diff)
-            depths[i] = sample_z[best_idx]
-
-        return depths
+        # pick the closest match
+        diff = np.abs(depth_vals - sample_z[None, :])
+        best = np.argmin(diff, axis=1)
+        return sample_z[best]
 
     def transform_depth_to_3d(
             self,
