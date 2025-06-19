@@ -167,6 +167,39 @@ class CameraTransform:
         )
         return projected.reshape(-1, 2)
 
+    def transform_depth_to_3d(
+            self,
+            pixels: np.ndarray,
+            depth_map: np.ndarray
+    ) -> np.ndarray:
+        norm = self._pixels_to_normalized_plane(
+            pixels, self._depth_calibration, self._depth_inv_distortion_mapping
+        )
+
+        # lookup depth with interpolation in m
+        Z = self._pixels_to_depth(pixels, depth_map) / 1000
+
+        # back-project: X_mm = x_norm * Z_mm, etc.
+        pts = np.empty((pixels.shape[0], 3), dtype=np.float32)
+        pts[:, 0] = norm[:, 0] * Z
+        pts[:, 1] = norm[:, 1] * Z
+        pts[:, 2] = Z
+
+        return pts
+
+    def transform_color_to_3d(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
+        return self.transform_depth_to_3d(self.transform_2d_color_to_depth(pixels, depth_map), depth_map)
+
+    def create_pointcloud(self, depth_map: np.ndarray, stride: int = 1) -> np.ndarray:
+        height, width = depth_map.shape
+
+        u_vals = np.arange(0, width, stride, dtype=np.float32)
+        v_vals = np.arange(0, height, stride, dtype=np.float32)
+        uu, vv = np.meshgrid(u_vals, v_vals)  # shapes (H/stride, W/stride)
+        sampled_pixels = np.stack([uu, vv], axis=-1).reshape(-1, 2)
+
+        return self.transform_depth_to_3d(sampled_pixels, depth_map)
+
     def _epipolar_search(self, color_norm: np.ndarray, depth_map: np.ndarray,
                          z_near: float, z_far: float, steps: int) -> np.ndarray:
         H, W = depth_map.shape
@@ -202,39 +235,6 @@ class CameraTransform:
         diff = np.abs(depth_vals - sample_z[None, :])
         best = np.argmin(diff, axis=1)
         return sample_z[best]
-
-    def transform_depth_to_3d(
-            self,
-            pixels: np.ndarray,
-            depth_map: np.ndarray
-    ) -> np.ndarray:
-        norm = self._pixels_to_normalized_plane(
-            pixels, self._depth_calibration, self._depth_inv_distortion_mapping
-        )
-
-        # lookup depth with interpolation in m
-        Z = self._pixels_to_depth(pixels, depth_map) / 1000
-
-        # back-project: X_mm = x_norm * Z_mm, etc.
-        pts = np.empty((pixels.shape[0], 3), dtype=np.float32)
-        pts[:, 0] = norm[:, 0] * Z
-        pts[:, 1] = norm[:, 1] * Z
-        pts[:, 2] = Z
-
-        return pts
-
-    def transform_color_to_3d(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
-        return self.transform_depth_to_3d(self.transform_2d_color_to_depth(pixels, depth_map), depth_map)
-
-    def create_pointcloud(self, depth_map: np.ndarray, stride: int = 1) -> np.ndarray:
-        height, width = depth_map.shape
-
-        u_vals = np.arange(0, width, stride, dtype=np.float32)
-        v_vals = np.arange(0, height, stride, dtype=np.float32)
-        uu, vv = np.meshgrid(u_vals, v_vals)  # shapes (H/stride, W/stride)
-        sampled_pixels = np.stack([uu, vv], axis=-1).reshape(-1, 2)
-
-        return self.transform_depth_to_3d(sampled_pixels, depth_map)
 
     @staticmethod
     def _pixels_to_normalized_plane(pixels: np.ndarray,
