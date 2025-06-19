@@ -2,7 +2,7 @@ import numpy as np
 
 from openk4a.calibration import Intrinsics, Extrinsics, CameraCalibration
 
-# --- Color calibration data ---
+# Color calibration data
 color_intrinsics: Intrinsics = Intrinsics(
     camera_matrix=np.array([
         [917.8631, 0.0, 953.6561],
@@ -33,7 +33,7 @@ color_camera_calibration: CameraCalibration = CameraCalibration(
     metric_radius=1.7
 )
 
-# --- Depth calibration data ---
+# Depth calibration data
 depth_intrinsics: Intrinsics = Intrinsics(
     camera_matrix=np.array([
         [504.3556, 0.0, 331.07727],

@@ -239,13 +239,38 @@ class CameraTransform:
         return rot_vec, t_rel.flatten()
 
     def transform_depth_to_3d(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
-        uv_int = pixels.astype(np.int32)
-        depth_values = depth_map[uv_int[:, 1], uv_int[:, 0]].reshape(-1, 1)
-        object_points = np.hstack((pixels, depth_values)).astype(np.float32)
-        points_3d, _ = cv2.projectPoints(object_points, np.eye(1), np.zeros(3),
-                                         self._depth_calibration.intrinsics.camera_matrix,
-                                         self._depth_calibration.intrinsics.distortion_coefficients)
-        return points_3d
+        # Undistort to normalized image plane
+        pixels_f = pixels.astype(np.float32)
+        normalized = cv2.undistortPointsIter(
+            pixels_f.reshape(-1, 1, 2),
+            self._depth_calibration.intrinsics.camera_matrix,
+            self._depth_calibration.intrinsics.distortion_coefficients,
+            None, None,
+            (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 20, 1e-22)
+        ).reshape(-1, 2)  # shape (N,2)
+
+        H, W = depth_map.shape
+        uv = pixels.astype(np.int32, copy=False)
+        depth_flat = depth_map.ravel()
+        idx = uv[:, 1] * W + uv[:, 0]
+        Z = depth_flat[idx].astype(np.float32) * 0.001
+
+        out = np.empty((pixels.shape[0], 3), dtype=np.float32)
+        out[:, 2] = Z
+        out[:, 0] = normalized[:, 0] * Z
+        out[:, 1] = normalized[:, 1] * Z
+
+        return out
 
     def transform_color_to_3d(self, pixels: np.ndarray, depth_map: np.ndarray) -> np.ndarray:
         return self.transform_depth_to_3d(self.transform_2d_color_to_depth(pixels, depth_map), depth_map)
+
+    def create_pointcloud(self, depth_map: np.ndarray, stride: int = 1) -> np.ndarray:
+        height, width = depth_map.shape
+
+        u_vals = np.arange(0, width, stride, dtype=np.float32)
+        v_vals = np.arange(0, height, stride, dtype=np.float32)
+        uu, vv = np.meshgrid(u_vals, v_vals)  # shapes (H/stride, W/stride)
+        sampled_pixels = np.stack([uu, vv], axis=-1).reshape(-1, 2)
+
+        return self.transform_depth_to_3d(sampled_pixels, depth_map)
